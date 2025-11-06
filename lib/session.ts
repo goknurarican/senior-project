@@ -29,9 +29,18 @@ export async function getOrCreateSession(req: any, res: any) {
 
 export function assignExperimentGroup() {
   const rand = Math.random() * 100;
-  if (rand < 50) return 'control';
-  if (rand < 75) return 'variant_a';
-  return 'variant_b';
+  
+  // 25% Control (no scenarios)
+  if (rand < 25) return 'control';
+  
+  // 25% Variant A (Low tier - 30% probability)
+  if (rand < 50) return 'variant_a';
+  
+  // 25% Variant B (Medium tier - 60% probability)  
+  if (rand < 75) return 'variant_b';
+  
+  // 25% Variant C (Full tier - 100% probability)
+  return 'variant_c';
 }
 
 export async function getSessionInfo(sessionId: string) {

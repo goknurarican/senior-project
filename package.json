@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "reset-db": "node scripts/reset-db.js"
   },
   "dependencies": {
     "next": "14.0.4",

@@ -6,12 +6,32 @@
 npm install
 ```
 
-### 2. Uygulamayı başlatın:
+### 2. Veritabanını sıfırlayın (opsiyonel - duplicate senaryoları temizler):
+```bash
+npm run reset-db
+```
+
+### 3. Uygulamayı başlatın:
 ```bash
 npm run dev
 ```
 
 Uygulama http://localhost:3000 adresinde çalışacaktır.
+
+## 👤 Test Hesapları
+
+| Rol | Email | Şifre |
+|-----|-------|-------|
+| Admin | admin@test.com | admin123 |
+| User | user@test.com | user123 |
+
+## 🎯 Düzeltilen Sorunlar
+
+✅ **Duplicate senaryolar temizlendi** - Veritabanı her başlatıldığında senaryolar sıfırlanıyor  
+✅ **Ürün detay sayfası eklendi** - Ürünlere tıklanabiliyor  
+✅ **Login sistemi eklendi** - Admin ve user rolleri  
+✅ **Admin panel sayfaları tamamlandı** - Scenarios, Experiments, Sessions  
+✅ **Senaryo enable/disable düzeltildi** - Değişiklikler anında yansıyor
 
 ## 📁 Proje Yapısı
 

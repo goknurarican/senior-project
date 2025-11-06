@@ -6,8 +6,13 @@
     sessionId: null,
     experimentGroup: null,
     scenarios: [],
-    triggeredScenarios: new Set(),
+    triggeredScenarios: new Map(), // Changed to Map to track cooldown times
     eventQueue: [],
+    pageLoadTime: Date.now(),
+    scenariosPerSession: 0,
+    lastScenarioTime: 0,
+    COOLDOWN_MS: 120000, // 120 seconds cooldown between scenarios
+    MAX_SCENARIOS_PER_SESSION: 2,
     
     init: async function() {
       // Get session info
@@ -16,7 +21,12 @@
       this.sessionId = data.sessionId;
       this.experimentGroup = data.experimentGroup;
       
-      // Only load scenarios for non-control groups
+      console.log('🚀 SDK Initialized:', {
+        sessionId: this.sessionId.substring(0, 8),
+        group: this.experimentGroup
+      });
+      
+      // Load scenarios based on experiment group
       if (this.experimentGroup !== 'control') {
         await this.loadScenarios();
         this.startScenarioWatcher();
@@ -28,30 +38,70 @@
       
       // Flush events every 2 seconds
       setInterval(() => this.flushEvents(), 2000);
-      
-      console.log('SDK Initialized:', this.experimentGroup);
     },
     
+    
     loadScenarios: async function() {
-      const res = await fetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}`);
-      this.scenarios = await res.json();
+      const res = await fetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
+      const allScenarios = await res.json();
+      
+      // Filter only enabled scenarios
+      this.scenarios = allScenarios.filter(s => s.enabled === 1);
+      
+      console.log('📦 Loaded scenarios:', this.scenarios.map(s => ({
+        name: s.name,
+        probability: s.probability,
+        enabled: s.enabled
+      })));
     },
     
     startScenarioWatcher: function() {
-      // Check time-based scenarios every second
+      // Check for scenario triggers every second
       setInterval(() => {
         const now = Date.now();
-        const pageLoadTime = performance.timing.navigationStart;
-        const timeSinceLoad = now - pageLoadTime;
+        const timeSinceLoad = now - this.pageLoadTime;
         
+        // Check cooldown
+        if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
+          return; // Still in cooldown
+        }
+        
+        // Check max scenarios per session
+        if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) {
+          return;
+        }
+        
+        // Try to execute scenarios based on time and probability
         this.scenarios.forEach(scenario => {
-          if (this.triggeredScenarios.has(scenario.id)) return;
+          // Skip if already triggered
+          if (this.triggeredScenarios.has(scenario.id)) {
+            return;
+          }
           
-          // Random probability check
-          if (Math.random() > scenario.probability) return;
+          // Skip if disabled
+          if (!scenario.enabled) {
+            return;
+          }
           
-          // Time-based trigger (after 5 seconds on page)
-          if (timeSinceLoad > 5000) {
+          // Check probability based on experiment group
+          let effectiveProbability = scenario.probability;
+          
+          // Adjust probability based on experiment group
+          if (this.experimentGroup === 'variant_a') {
+            effectiveProbability = scenario.probability * 0.5; // Low tier: 30% of original
+          } else if (this.experimentGroup === 'variant_b') {
+            effectiveProbability = scenario.probability * 0.8; // Medium tier: 60% of original  
+          } else if (this.experimentGroup === 'variant_c') {
+            effectiveProbability = Math.min(scenario.probability * 1.5, 1.0); // Full tier: 100% (boosted)
+          }
+          
+          // Random check
+          if (Math.random() > effectiveProbability) {
+            return;
+          }
+          
+          // Time-based trigger (after 3 seconds on page)
+          if (timeSinceLoad > 3000) {
             this.executeScenario(scenario);
           }
         });
@@ -60,29 +110,92 @@
     
     executeScenario: function(scenario) {
       if (this.triggeredScenarios.has(scenario.id)) return;
-      this.triggeredScenarios.add(scenario.id);
+      
+      // Check cooldown and limits
+      const now = Date.now();
+      if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
+        return;
+      }
+      
+      if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) {
+        return;
+      }
+      
+      this.triggeredScenarios.set(scenario.id, now);
+      this.scenariosPerSession++;
+      this.lastScenarioTime = now;
       
       const params = JSON.parse(scenario.params || '{}');
       
-      console.log('Executing scenario:', scenario.name);
-      this.logEvent('scenario_start', { scenario_id: scenario.id, type: scenario.type });
+      console.log('⚡ Executing scenario:', scenario.name, params);
+      this.logEvent('scenario_start', { 
+        scenario_id: scenario.id, 
+        type: scenario.type,
+        name: scenario.name 
+      });
       
+      // Execute based on scenario type
       switch(scenario.type) {
+        // Loading/Visual scenarios
         case 'slow_image':
-          this.slowImageLoad(scenario.selector, params.delay);
+          this.slowImageLoad(scenario.selector, params.delay || 1500);
           break;
+        case 'broken_image':
+          this.brokenImage(scenario.selector);
+          break;
+        case 'skeleton_prolong':
+          this.skeletonProlong(scenario.selector, params.delay || 2000);
+          break;
+          
+        // Interaction/Friction scenarios  
         case 'button_delay':
-          this.buttonDelay(scenario.selector, params.delay);
+          this.buttonDelay(scenario.selector, params.delay || 1200);
           break;
+        case 'first_click_miss':
+          this.firstClickMiss(scenario.selector);
+          break;
+        case 'feedback_late':
+          this.feedbackLate(params.delay || 1500);
+          break;
+          
+        // Search/Navigation scenarios
         case 'search_irrelevant':
-          this.searchIrrelevant(params.duration);
+          this.searchIrrelevant(params.duration || 5000);
           break;
+        case 'facet_reset_once':
+        case 'sort_reset':
+          this.resetFilters();
+          break;
+          
+        // Cart/Checkout scenarios
         case 'price_change':
-          this.priceChangeWarning(params.change_percent);
+          this.priceChangeWarning(params.change_percent || 5);
           break;
+        case 'coupon_min_spend':
+        case 'coupon_expired':
+          this.couponError(scenario.type);
+          break;
+          
+        // Payment scenarios
         case '3ds_soft_fail':
           this.threeDSSoftFail();
           break;
+        case 'payment_retry_timeout':
+          this.paymentTimeout();
+          break;
+          
+        // Overlay scenarios
+        case 'overlay_blocking':
+          this.overlayBlocking(params.duration || 4000);
+          break;
+          
+        // Network scenarios
+        case 'network_jitter':
+          this.networkJitter(params.delay || 500);
+          break;
+          
+        default:
+          console.warn('Unknown scenario type:', scenario.type);
       }
       
       // Log scenario trigger
@@ -96,77 +209,268 @@
         })
       });
       
+      // Log scenario end after duration
       setTimeout(() => {
-        this.logEvent('scenario_end', { scenario_id: scenario.id, type: scenario.type });
+        this.logEvent('scenario_end', { 
+          scenario_id: scenario.id, 
+          type: scenario.type,
+          name: scenario.name
+        });
       }, params.delay || params.duration || 2000);
     },
     
+    
+    // Scenario Implementations
     slowImageLoad: function(selector, delay) {
-      const images = document.querySelectorAll(selector || '.product-image');
+      const images = document.querySelectorAll(selector || '.product-image, img');
       images.forEach((img, index) => {
-        if (index < 2) { // Only affect first 2 images
+        if (index < 3) { // Affect first 3 images
           const originalSrc = img.src;
+          img.classList.add('blur-sm', 'animate-pulse');
           img.style.filter = 'blur(8px)';
-          img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23ddd" width="400" height="300"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3ELoading...%3C/text%3E%3C/svg%3E';
           
           setTimeout(() => {
-            img.src = originalSrc;
+            img.src = originalSrc + '?t=' + Date.now(); // Force reload
             img.style.filter = 'none';
+            img.classList.remove('blur-sm', 'animate-pulse');
           }, delay);
         }
       });
     },
     
+    brokenImage: function(selector) {
+      const images = document.querySelectorAll(selector || '.product-image');
+      if (images.length > 0) {
+        const randomImg = images[Math.floor(Math.random() * Math.min(3, images.length))];
+        randomImg.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3EImage not available%3C/text%3E%3C/svg%3E';
+      }
+    },
+    
+    skeletonProlong: function(selector, delay) {
+      const elements = document.querySelectorAll(selector || '.product-card');
+      elements.forEach(el => {
+        el.style.opacity = '0.5';
+        el.classList.add('animate-pulse');
+        setTimeout(() => {
+          el.style.opacity = '1';
+          el.classList.remove('animate-pulse');
+        }, delay);
+      });
+    },
+    
     buttonDelay: function(selector, delay) {
-      const buttons = document.querySelectorAll(selector || '.add-to-cart');
+      const buttons = document.querySelectorAll(selector || '.add-to-cart, button[type="submit"]');
       buttons.forEach(btn => {
-        const originalClick = btn.onclick;
+        const originalHandler = btn.onclick;
         btn.onclick = function(e) {
           e.preventDefault();
+          e.stopPropagation();
+          
+          // Visual feedback
           btn.disabled = true;
-          btn.style.opacity = '0.5';
+          btn.style.opacity = '0.6';
+          btn.style.cursor = 'wait';
           const originalText = btn.textContent;
           btn.textContent = 'Processing...';
           
           setTimeout(() => {
             btn.disabled = false;
             btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
             btn.textContent = originalText;
-            if (originalClick) originalClick.call(btn, e);
+            
+            // Trigger original action
+            if (originalHandler) {
+              originalHandler.call(btn, e);
+            } else {
+              btn.click();
+            }
           }, delay);
+          
+          return false;
         };
       });
     },
     
+    firstClickMiss: function(selector) {
+      const buttons = document.querySelectorAll(selector || 'button');
+      buttons.forEach(btn => {
+        let isFirstClick = true;
+        const originalHandler = btn.onclick;
+        
+        btn.onclick = function(e) {
+          if (isFirstClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            isFirstClick = false;
+            
+            // Visual hint
+            btn.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+              btn.style.transform = '';
+            }, 200);
+            
+            return false;
+          }
+          
+          if (originalHandler) {
+            return originalHandler.call(btn, e);
+          }
+        };
+      });
+    },
+    
+    feedbackLate: function(delay) {
+      // Intercept toast notifications
+      const originalAlert = window.alert;
+      window.alert = function(message) {
+        setTimeout(() => {
+          originalAlert(message);
+        }, delay);
+      };
+    },
+    
     searchIrrelevant: function(duration) {
-      // Temporarily scramble search results
       const products = document.querySelectorAll('.product-card');
       const parent = products[0]?.parentNode;
       if (!parent) return;
       
-      const shuffled = Array.from(products).sort(() => Math.random() - 0.5);
+      // Save original order
+      const originalOrder = Array.from(products).map((p, i) => {
+        p.dataset.originalOrder = i;
+        return p;
+      });
+      
+      // Shuffle
+      const shuffled = [...originalOrder].sort(() => Math.random() - 0.5);
       shuffled.forEach(p => parent.appendChild(p));
       
-      // Show notification
-      this.showToast('Updating search results...', 'info');
+      this.showToast('Updating search results...', 'info', duration);
       
       // Restore after duration
       setTimeout(() => {
-        const resorted = Array.from(products).sort((a, b) => {
-          return parseInt(a.dataset.order || '0') - parseInt(b.dataset.order || '0');
-        });
-        resorted.forEach(p => parent.appendChild(p));
+        originalOrder.forEach(p => parent.appendChild(p));
       }, duration);
     },
     
+    resetFilters: function() {
+      // Reset checkboxes and radios
+      document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => {
+        if (input.name.includes('filter') || input.name.includes('category')) {
+          input.checked = false;
+        }
+      });
+      
+      // Reset select dropdowns
+      document.querySelectorAll('select').forEach(select => {
+        select.selectedIndex = 0;
+      });
+      
+      this.showToast('Filters reset', 'warning', 2000);
+    },
+    
     priceChangeWarning: function(changePercent) {
-      if (window.location.pathname === '/checkout') {
-        this.showToast(`Price updated: ${changePercent}% change detected`, 'warning', 5000);
+      if (window.location.pathname.includes('checkout') || window.location.pathname.includes('cart')) {
+        const banner = document.createElement('div');
+        banner.className = 'bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4';
+        banner.innerHTML = `
+          <div class="flex">
+            <div class="flex-shrink-0">⚠️</div>
+            <div class="ml-3">
+              <p class="text-sm text-yellow-700">
+                Price updated: ${changePercent}% change detected since you added items to cart.
+              </p>
+            </div>
+          </div>
+        `;
+        
+        const container = document.querySelector('main');
+        if (container) {
+          container.insertBefore(banner, container.firstChild);
+          setTimeout(() => banner.remove(), 5000);
+        }
+      }
+    },
+    
+    couponError: function(type) {
+      const couponInput = document.querySelector('input[placeholder*="Coupon"]');
+      if (couponInput) {
+        const parent = couponInput.parentElement;
+        const error = document.createElement('div');
+        error.className = 'text-red-500 text-sm mt-1';
+        error.textContent = type === 'coupon_min_spend' 
+          ? 'Minimum spend of ₺500 required for this coupon'
+          : 'This coupon has expired';
+        parent.appendChild(error);
+        
+        setTimeout(() => error.remove(), 3000);
       }
     },
     
     threeDSSoftFail: function() {
       window.ExperimentSDK.firstPaymentAttempt = true;
+      console.log('💳 3DS will fail on first attempt');
+    },
+    
+    paymentTimeout: function() {
+      // Intercept fetch for payment endpoints
+      const originalFetch = window.fetch;
+      let isFirst = true;
+      
+      window.fetch = function(...args) {
+        if (args[0].includes('checkout') && isFirst) {
+          isFirst = false;
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              reject(new Error('Request timeout'));
+            }, 1500);
+          });
+        }
+        return originalFetch.apply(this, args);
+      };
+    },
+    
+    overlayBlocking: function(duration) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+      overlay.innerHTML = `
+        <div class="bg-white rounded-lg p-8 max-w-md mx-4">
+          <h2 class="text-2xl font-bold mb-4">Special Offer!</h2>
+          <p class="text-gray-600 mb-4">Get 10% off your first order with code WELCOME10</p>
+          <button class="close-overlay bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+            Continue Shopping
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      const closeBtn = overlay.querySelector('.close-overlay');
+      closeBtn.onclick = () => overlay.remove();
+      
+      // Auto-close after duration
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.remove();
+        }
+      }, duration);
+    },
+    
+    networkJitter: function(delay) {
+      // Add artificial delay to all network requests
+      const originalFetch = window.fetch;
+      window.fetch = function(...args) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(originalFetch.apply(this, args));
+          }, delay);
+        });
+      };
+      
+      // Reset after 10 seconds
+      setTimeout(() => {
+        window.fetch = originalFetch;
+      }, 10000);
     },
     
     showToast: function(message, type = 'info', duration = 3000) {

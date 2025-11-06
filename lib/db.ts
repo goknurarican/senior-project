@@ -97,6 +97,16 @@ async function initDb() {
       FOREIGN KEY (session_id) REFERENCES sessions(id),
       FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
     );
+
+    -- Users table for authentication
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      password TEXT,
+      role TEXT DEFAULT 'user',
+      name TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed products if empty
@@ -105,10 +115,17 @@ async function initDb() {
     await seedProducts();
   }
 
-  // Seed scenarios if empty
+  // Seed scenarios if empty - CLEAR OLD AND RECREATE
   const scenarioCount = await db.get('SELECT COUNT(*) as count FROM scenarios');
-  if (scenarioCount.count === 0) {
-    await seedScenarios();
+  if (scenarioCount.count > 0) {
+    await db.run('DELETE FROM scenarios');
+  }
+  await seedScenarios();
+
+  // Seed users if empty
+  const userCount = await db.get('SELECT COUNT(*) as count FROM users');
+  if (userCount.count === 0) {
+    await seedUsers();
   }
 }
 
@@ -136,52 +153,179 @@ async function seedProducts() {
 
 async function seedScenarios() {
   const scenarios = [
+    // A) Loading/Visual Scenarios
     {
       name: 'Slow Image Load',
       type: 'slow_image',
       target_page: '/products',
       selector: '.product-image',
-      params: JSON.stringify({ delay: 2000 }),
+      params: JSON.stringify({ delay: 1500 }),
+      probability: 0.6
+    },
+    {
+      name: 'Broken Image',
+      type: 'broken_image',
+      target_page: '/products',
+      selector: '.product-image',
+      params: JSON.stringify({ probability: 0.05 }),
       probability: 0.3
     },
     {
+      name: 'Skeleton Prolong',
+      type: 'skeleton_prolong',
+      target_page: '/products',
+      selector: '.product-card',
+      params: JSON.stringify({ delay: 2000 }),
+      probability: 0.6
+    },
+    
+    // B) Interaction/Friction Scenarios
+    {
       name: 'Button Delay',
       type: 'button_delay',
-      target_page: '/product',
+      target_page: '*',
       selector: '.add-to-cart',
-      params: JSON.stringify({ delay: 1500 }),
-      probability: 0.2
+      params: JSON.stringify({ delay: 1200 }),
+      probability: 0.6
     },
+    {
+      name: 'First Click Miss',
+      type: 'first_click_miss', 
+      target_page: '*',
+      selector: 'button',
+      params: JSON.stringify({}),
+      probability: 0.3
+    },
+    {
+      name: 'Feedback Late',
+      type: 'feedback_late',
+      target_page: '*',
+      selector: null,
+      params: JSON.stringify({ delay: 1500 }),
+      probability: 0.6
+    },
+    
+    // C) Search/Navigation Scenarios
     {
       name: 'Search Irrelevant',
       type: 'search_irrelevant',
       target_page: '/products',
       selector: null,
       params: JSON.stringify({ duration: 5000 }),
-      probability: 0.15
+      probability: 0.6
     },
     {
-      name: '3DS Soft Fail',
-      type: '3ds_soft_fail',
-      target_page: '/checkout',
+      name: 'Facet Reset Once',
+      type: 'facet_reset_once',
+      target_page: '/products',
       selector: null,
-      params: JSON.stringify({ first_attempt_fail: true }),
-      probability: 0.1
+      params: JSON.stringify({}),
+      probability: 0.3
     },
+    {
+      name: 'Sort Reset',
+      type: 'sort_reset',
+      target_page: '/products',
+      selector: null,
+      params: JSON.stringify({}),
+      probability: 0.3
+    },
+    
+    // D) Data Consistency Scenarios
     {
       name: 'Price Change Warning',
       type: 'price_change',
       target_page: '/checkout',
       selector: null,
       params: JSON.stringify({ change_percent: 5 }),
-      probability: 0.1
+      probability: 0.6
+    },
+    
+    // E) Cart/Coupon Scenarios
+    {
+      name: 'Coupon Min Spend',
+      type: 'coupon_min_spend',
+      target_page: '/cart',
+      selector: null,
+      params: JSON.stringify({ min_amount: 500 }),
+      probability: 0.6
+    },
+    {
+      name: 'Coupon Expired',
+      type: 'coupon_expired',
+      target_page: '/cart',
+      selector: null,
+      params: JSON.stringify({}),
+      probability: 0.3
+    },
+    
+    // F) Payment Scenarios
+    {
+      name: '3DS Soft Fail',
+      type: '3ds_soft_fail',
+      target_page: '/checkout',
+      selector: null,
+      params: JSON.stringify({}),
+      probability: 0.6
+    },
+    {
+      name: 'Payment Retry Timeout',
+      type: 'payment_retry_timeout',
+      target_page: '/checkout',
+      selector: null,
+      params: JSON.stringify({ timeout: 1500 }),
+      probability: 0.6
+    },
+    
+    // G) Overlay/Attention Scenarios  
+    {
+      name: 'Overlay Blocking',
+      type: 'overlay_blocking',
+      target_page: '/',
+      selector: null,
+      params: JSON.stringify({ duration: 4000 }),
+      probability: 0.3
+    },
+    
+    // H) Network Scenarios
+    {
+      name: 'Network Jitter',
+      type: 'network_jitter',
+      target_page: '*',
+      selector: null,
+      params: JSON.stringify({ delay: 500 }),
+      probability: 0.6
     }
   ];
 
   for (const s of scenarios) {
     await db.run(
-      'INSERT INTO scenarios (name, type, target_page, selector, params, probability) VALUES (?, ?, ?, ?, ?, ?)',
-      [s.name, s.type, s.target_page, s.selector, s.params, s.probability]
+      'INSERT INTO scenarios (name, type, target_page, selector, params, probability, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [s.name, s.type, s.target_page, s.selector, s.params, s.probability, 1] // All enabled by default
+    );
+  }
+}
+
+async function seedUsers() {
+  const users = [
+    {
+      email: 'admin@test.com',
+      password: 'admin123', // In production, use bcrypt
+      role: 'admin',
+      name: 'Admin User'
+    },
+    {
+      email: 'user@test.com',
+      password: 'user123',
+      role: 'user',
+      name: 'Test User'
+    }
+  ];
+
+  for (const u of users) {
+    await db.run(
+      'INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)',
+      [u.email, u.password, u.role, u.name]
     );
   }
 }

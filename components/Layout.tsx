@@ -6,11 +6,13 @@ import { useRouter } from 'next/router';
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [cartCount, setCartCount] = useState(0);
   const [sessionInfo, setSessionInfo] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const router = useRouter();
   
   useEffect(() => {
     fetchCartCount();
     fetchSessionInfo();
+    fetchUser();
   }, [router.asPath]);
   
   const fetchCartCount = async () => {
@@ -23,6 +25,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const res = await fetch('/api/session/info');
     const data = await res.json();
     setSessionInfo(data);
+  };
+  
+  const fetchUser = async () => {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      setUser(data);
+    }
+  };
+  
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+    router.push('/');
   };
   
   return (
@@ -45,6 +61,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <Link href="/products?category=home" className="text-gray-700 hover:text-blue-600">
                   Home
                 </Link>
+                <Link href="/test-scenarios" className="text-purple-600 hover:text-purple-800 font-semibold">
+                  Test Lab
+                </Link>
               </nav>
             </div>
             
@@ -65,9 +84,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </span>
                 )}
               </Link>
-              <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-700">
-                Admin
-              </Link>
+              
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-600">
+                    {user.name} ({user.role})
+                  </span>
+                  {user.role === 'admin' && (
+                    <Link href="/admin" className="text-sm text-blue-600 hover:text-blue-800">
+                      Admin
+                    </Link>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <Link href="/login" className="text-sm text-blue-600 hover:text-blue-800">
+                  Login
+                </Link>
+              )}
             </div>
           </div>
         </div>
