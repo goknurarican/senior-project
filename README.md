@@ -1,6 +1,5 @@
 # E-Commerce Experiment Platform
 
-## 🚀 Hızlı Kurulum
 
 ### 1. Bağımlılıkları yükleyin:
 ```bash
