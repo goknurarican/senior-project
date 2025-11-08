@@ -1,0 +1,338 @@
+// public/injection-sdk.js
+(function() {
+  'use strict';
+
+  window.ExperimentSDK = {
+    sessionId: null,
+    experimentGroup: null,
+    scenarios: [],
+    triggeredScenarios: new Map(),
+    eventQueue: [],
+    pageLoadTime: Date.now(),
+    scenariosPerSession: 0,
+    lastScenarioTime: 0,
+    COOLDOWN_MS: 1000, // initial cooldown
+    MAX_SCENARIOS_PER_SESSION: 5,
+
+    init: async function() {
+      const res = await fetch('/api/session/info');
+      const data = await res.json();
+      this.sessionId = data.sessionId;
+      this.experimentGroup = data.experimentGroup;
+
+      console.log('🚀 SDK Initialized:', {
+        sessionId: this.sessionId.substring(0, 8),
+        group: this.experimentGroup
+      });
+
+      if (this.experimentGroup !== 'control') {
+        await this.loadScenarios();
+        this.startScenarioWatcher();
+      }
+
+      this.trackPageView();
+      this.attachEventListeners();
+      setInterval(() => this.flushEvents(), 2000);
+    },
+
+    loadScenarios: async function() {
+      const res = await fetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
+      const allScenarios = await res.json();
+      this.scenarios = allScenarios.filter(s => s.enabled === 1);
+
+      console.log('📦 Loaded scenarios:', this.scenarios.map(s => ({
+        name: s.name,
+        probability: s.probability,
+        enabled: s.enabled
+      })));
+    },
+
+    startScenarioWatcher: function() {
+      const MIN_COOLDOWN = 500;
+      const MAX_COOLDOWN = 1500;
+
+      const tryTrigger = () => {
+        const now = Date.now();
+        const timeSinceLoad = now - this.pageLoadTime;
+
+        if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) return;
+        if (this.lastScenarioTime && (now - this.lastScenarioTime) < 10000) {
+          setTimeout(tryTrigger, 500);
+          return;
+        }
+
+        const scenario = this.scenarios.find(s =>
+          !this.triggeredScenarios.has(s.id) &&
+          s.enabled &&
+          Math.random() < (s.probability || 0.9) &&
+          timeSinceLoad > 1000
+        );
+
+        if (scenario) this.executeScenario(scenario);
+
+        const nextCooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
+        setTimeout(tryTrigger, nextCooldown);
+      };
+
+      tryTrigger();
+    },
+
+    executeScenario: function(scenario) {
+      if (this.triggeredScenarios.has(scenario.id)) return;
+
+      const now = Date.now();
+      if (this.lastScenarioTime && (now - this.lastScenarioTime) < 10000) return;
+      if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) return;
+
+      this.triggeredScenarios.set(scenario.id, now);
+      this.scenariosPerSession++;
+      this.lastScenarioTime = now;
+
+      const params = JSON.parse(scenario.params || '{}');
+
+      console.log('⚡ Executing scenario:', scenario.name, params);
+      this.logEvent('scenario_start', {
+        scenario_id: scenario.id,
+        type: scenario.type,
+        name: scenario.name
+      });
+
+      switch(scenario.type) {
+        case 'slow_image': this.slowImageLoad(scenario.selector, params.delay || 1000); break;
+        case 'broken_image': this.brokenImage(scenario.selector); break;
+        case 'skeleton_prolong': this.skeletonProlong(scenario.selector, params.delay || 1500); break;
+        case 'button_delay': this.buttonDelay(scenario.selector, params.delay || 800); break;
+        case 'first_click_miss': this.firstClickMiss(scenario.selector); break;
+        case 'feedback_late': this.feedbackLate(params.delay || 1000); break;
+        case 'search_irrelevant': this.searchIrrelevant(params.duration || 3000); break;
+        case 'facet_reset_once':
+        case 'sort_reset': this.resetFilters(); break;
+        case 'price_change': this.priceChangeWarning(params.change_percent || 5); break;
+        case 'coupon_min_spend':
+        case 'coupon_expired': this.couponError(scenario.type); break;
+        case '3ds_soft_fail': this.threeDSSoftFail(); break;
+        case 'payment_retry_timeout': this.paymentTimeout(); break;
+        case 'overlay_blocking': this.overlayBlocking(params.duration || 3000); break;
+        case 'network_jitter': this.networkJitter(params.delay || 400); break;
+        default: console.warn('Unknown scenario type:', scenario.type);
+      }
+
+      fetch('/api/scenarios/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: this.sessionId,
+          scenarioId: scenario.id,
+          status: 'triggered'
+        })
+      });
+
+      setTimeout(() => {
+        this.logEvent('scenario_end', {
+          scenario_id: scenario.id,
+          type: scenario.type,
+          name: scenario.name
+        });
+      }, params.delay || params.duration || 1500);
+    },
+
+    slowImageLoad: function(selector, delay) {
+      const images = document.querySelectorAll(selector || '.product-image, img');
+      images.forEach((img, index) => {
+        if (index < 3) {
+          const originalSrc = img.src;
+          img.classList.add('blur-sm', 'animate-pulse');
+          img.style.filter = 'blur(8px)';
+          setTimeout(() => {
+            img.src = originalSrc + '?t=' + Date.now();
+            img.style.filter = 'none';
+            img.classList.remove('blur-sm', 'animate-pulse');
+          }, delay);
+        }
+      });
+    },
+
+    brokenImage: function(selector) {
+      const images = document.querySelectorAll(selector || '.product-image');
+      if (images.length) {
+        const randomImg = images[Math.floor(Math.random() * Math.min(3, images.length))];
+        randomImg.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3EImage not available%3C/text%3E%3C/svg%3E';
+      }
+    },
+
+    skeletonProlong: function(selector, delay) {
+      const elements = document.querySelectorAll(selector || '.product-card');
+      elements.forEach(el => {
+        el.style.opacity = '0.5';
+        el.classList.add('animate-pulse');
+        setTimeout(() => {
+          el.style.opacity = '1';
+          el.classList.remove('animate-pulse');
+        }, delay);
+      });
+    },
+
+    buttonDelay: function(selector, delay = 5000) {
+  const buttons = document.querySelectorAll(selector || '.add-to-cart, button[type="submit"]');
+
+  buttons.forEach(btn => {
+    // Skip if already injected
+    if (btn.dataset.buttonDelayInjected) return;
+    btn.dataset.buttonDelayInjected = 'true';
+
+    // Truly disable the button
+    btn.disabled = true;
+
+    // Optional: show visual feedback
+    const originalText = btn.textContent;
+    btn.textContent = 'Processing...';
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
+
+    // Re-enable after delay
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }, delay);
+  });
+},
+
+    firstClickMiss: function(selector) {
+      const buttons = document.querySelectorAll(selector || 'button');
+      buttons.forEach(btn => {
+        let isFirstClick = true;
+        const originalHandler = btn.onclick;
+        btn.onclick = function(e) {
+          if (isFirstClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            isFirstClick = false;
+            btn.style.transform = 'scale(0.98)';
+            setTimeout(() => btn.style.transform = '', 200);
+            return false;
+          }
+          if (originalHandler) return originalHandler.call(btn, e);
+        };
+      });
+    },
+
+    feedbackLate: function(delay) {
+      const originalAlert = window.alert;
+      window.alert = function(message) {
+        setTimeout(() => originalAlert(message), delay);
+      };
+    },
+
+    searchIrrelevant: function(duration) {
+      const products = document.querySelectorAll('.product-card');
+      const parent = products[0]?.parentNode;
+      if (!parent) return;
+      const originalOrder = Array.from(products);
+      const shuffled = [...originalOrder].sort(() => Math.random() - 0.5);
+      shuffled.forEach(p => parent.appendChild(p));
+      this.showToast('Updating search results...', 'info', duration);
+      setTimeout(() => originalOrder.forEach(p => parent.appendChild(p)), duration);
+    },
+
+    resetFilters: function() {
+      document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => { input.checked = false; });
+      document.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+      this.showToast('Filters reset', 'warning', 2000);
+    },
+
+    priceChangeWarning: function(changePercent) {
+      if (window.location.pathname.includes('checkout') || window.location.pathname.includes('cart')) {
+        const banner = document.createElement('div');
+        banner.className = 'bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4';
+        banner.innerHTML = `<div class="flex"><div class="flex-shrink-0">⚠️</div><div class="ml-3"><p class="text-sm text-yellow-700">Price updated: ${changePercent}% change detected since you added items to cart.</p></div></div>`;
+        const container = document.querySelector('main');
+        if (container) { container.insertBefore(banner, container.firstChild); setTimeout(() => banner.remove(), 5000); }
+      }
+    },
+
+    couponError: function(type) {
+      const couponInput = document.querySelector('input[placeholder*="Coupon"]');
+      if (couponInput) {
+        const parent = couponInput.parentElement;
+        const error = document.createElement('div');
+        error.className = 'text-red-500 text-sm mt-1';
+        error.textContent = type === 'coupon_min_spend' ? 'Minimum spend of ₺500 required for this coupon' : 'This coupon has expired';
+        parent.appendChild(error);
+        setTimeout(() => error.remove(), 3000);
+      }
+    },
+
+    threeDSSoftFail: function() {
+      window.ExperimentSDK.firstPaymentAttempt = true;
+      console.log('💳 3DS will fail on first attempt');
+    },
+
+    paymentTimeout: function() {
+      const originalFetch = window.fetch;
+      let isFirst = true;
+      window.fetch = function(...args) {
+        if (args[0].includes('checkout') && isFirst) {
+          isFirst = false;
+          return new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 1500));
+        }
+        return originalFetch.apply(this, args);
+      };
+    },
+
+    overlayBlocking: function(duration) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
+      overlay.innerHTML = `<div class="bg-white rounded-lg p-8 max-w-md mx-4"><h2 class="text-2xl font-bold mb-4">Special Offer!</h2><p class="text-gray-600 mb-4">Get 10% off your first order with code WELCOME10</p><button class="close-overlay bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Continue Shopping</button></div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('.close-overlay').onclick = () => overlay.remove();
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, duration);
+    },
+
+    networkJitter: function(delay) {
+      const originalFetch = window.fetch;
+      window.fetch = function(...args) { return new Promise(resolve => setTimeout(() => resolve(originalFetch.apply(this, args)), delay)); };
+      setTimeout(() => window.fetch = originalFetch, 10000);
+    },
+
+    showToast: function(message, type = 'info', duration = 3000) {
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${type==='warning'?'bg-yellow-500':type==='error'?'bg-red-500':'bg-blue-500'}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), duration);
+    },
+
+    trackPageView: function() {
+      this.logEvent('page_view', { url: window.location.href, referrer: document.referrer, title: document.title });
+    },
+
+    attachEventListeners: function() {
+      document.addEventListener('click', e => {
+        const t = e.target;
+        if (t.tagName==='BUTTON' || t.tagName==='A') this.logEvent('click', { element: t.tagName, text: t.textContent?.substring(0,50), className: t.className, href: t.href });
+      });
+      let scrollTimer;
+      window.addEventListener('scroll', () => {
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => this.logEvent('scroll', { scrollY: window.scrollY, scrollHeight: document.documentElement.scrollHeight, percentage: (window.scrollY/document.documentElement.scrollHeight)*100 }), 500);
+      });
+    },
+
+    logEvent: function(type, data) {
+      this.eventQueue.push({ sessionId: this.sessionId, eventType: type, eventData: data, pageUrl: window.location.href, timestamp: Date.now() });
+    },
+
+    flushEvents: async function() {
+      if (!this.eventQueue.length) return;
+      const events = [...this.eventQueue]; this.eventQueue = [];
+      try { await fetch('/api/events/batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(events) }); }
+      catch(e) { this.eventQueue.push(...events); }
+    }
+  };
+
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>window.ExperimentSDK.init());
+  else window.ExperimentSDK.init();
+})();
+
