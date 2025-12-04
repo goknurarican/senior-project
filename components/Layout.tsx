@@ -1,0 +1,21 @@
+// components/Layout.tsx
+import Footer from "./Footer";
+import Navbar from "./Navbar";
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <Navbar />
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
+
+      {/* Footer */}
+      <Footer />
+
+      {/* Load SDK */}
+    </div>
+  );
+}
