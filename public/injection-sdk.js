@@ -11,9 +11,9 @@
     pageLoadTime: Date.now(),
     scenariosPerSession: 0,
     lastScenarioTime: 0,
-    COOLDOWN_MS: 12000, // 12 seconds cooldown between scenarios
-    MAX_SCENARIOS_PER_SESSION: 10,
-    
+    COOLDOWN_MS: 2000, // 12 seconds cooldown between scenarios
+    MAX_SCENARIOS_PER_SESSION: 1000,
+
     init: async function() {
       // Get session info
 
@@ -46,61 +46,61 @@ if (!this.sessionId) {
         await this.loadScenarios();
         this.startScenarioWatcher();
       }
-      
+
       // Start event tracking
       this.trackPageView();
       this.attachEventListeners();
-      
+
       // Flush events every 2 seconds
       setInterval(() => this.flushEvents(), 2000);
     },
-    
-    
+
+
     loadScenarios: async function() {
       const res = await fetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
       const allScenarios = await res.json();
-      
+
       // Filter only enabled scenarios
       this.scenarios = allScenarios.filter(s => s.enabled === 1);
-      
+
       console.log('📦 Loaded scenarios:', this.scenarios.map(s => ({
         name: s.name,
         probability: s.probability,
         enabled: s.enabled
       })));
     },
-    
+
     startScenarioWatcher: function() {
       // Check for scenario triggers every second
       setInterval(() => {
         const now = Date.now();
         const timeSinceLoad = now - this.pageLoadTime;
-        
+
         // Check cooldown
         if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
           return; // Still in cooldown
         }
-        
+
         // Check max scenarios per session
         if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) {
           return;
         }
-        
+
         // Try to execute scenarios based on time and probability
         this.scenarios.forEach(scenario => {
           // Skip if already triggered
-          if (this.triggeredScenarios.has(scenario.id)) {
-            return;
-          }
-          
+          //if (this.triggeredScenarios.has(scenario.id)) {
+            //return;
+          //}
+
           // Skip if disabled
           if (!scenario.enabled) {
             return;
           }
-          
+
           // Check probability based on experiment group
           let effectiveProbability = scenario.probability;
-          
+
           // Adjust probability based on experiment group
           if (this.experimentGroup === 'control') {
             effectiveProbability = 0; // Control group gets no scenarios
@@ -126,8 +126,11 @@ if (!this.sessionId) {
     },
 
     executeScenario: function(scenario) {
-      if (this.triggeredScenarios.has(scenario.id)) return;
-
+     // if (this.triggeredScenarios.has(scenario.id)) return;
+    if (scenario.selector && scenario.selector !== '' && document.querySelectorAll(scenario.selector).length === 0) {
+    // console.log('⏳ DOM elemanı bekleniyor:', scenario.name);
+    return;
+  }
       // Check cooldown and limits
       const now = Date.now();
       if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
@@ -217,14 +220,19 @@ if (!this.sessionId) {
 
       // Log scenario trigger
       fetch('/api/scenarios/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: this.sessionId,
-          scenarioId: scenario.id,
-          status: 'triggered'
-        })
-      });
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    sessionId: this.sessionId,
+    scenarioId: scenario.id,
+    status: 'triggered',
+    details: {
+        scenarioName: scenario.name,
+        type: scenario.type,
+        timestamp: Date.now()
+    }
+  })
+});
 
       // Log scenario end after duration
       setTimeout(() => {
