@@ -2,38 +2,27 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import getDb from '../../../lib/db';
 
-
-function formatLocalTimestampWithMs() {
-  const d = new Date();
-
-  const year   = d.getFullYear();
-  const month  = String(d.getMonth() + 1).padStart(2, '0');
-  const day    = String(d.getDate()).padStart(2, '0');
-  const hour   = String(d.getHours()).padStart(2, '0');
-  const minute = String(d.getMinutes()).padStart(2, '0');
-  const second = String(d.getSeconds()).padStart(2, '0');
-  const ms     = String(d.getMilliseconds()).padStart(3, '0');
-
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}:${ms}`;
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  
+
   const { sessionId, scenarioId, status, details } = req.body;
   const db = await getDb();
 
+  // Ortak zaman damgası (İki tabloya da aynısını yazalım ki eşleşsin)
+  const now = Date.now();
+
   try {
-    // 1. Resmi senaryo tetiklenme kaydı (Trigger Log)
+    // 1. Trigger Log (Artık buraya da zamanı biz veriyoruz)
+    // NOT: db.ts dosyasında scenario_triggers tablosunda 'triggered_at' sütunu integer olmalı.
+    // Eğer TIMESTAMP type ise yine de Date.now() integer'ını kabul eder.
     await db.run(
-      'INSERT INTO scenario_triggers (session_id, scenario_id, status) VALUES (?, ?, ?)',
-      [sessionId, scenarioId, status]
+      'INSERT INTO scenario_triggers (session_id, scenario_id, status, triggered_at) VALUES (?, ?, ?, ?)',
+      [sessionId, scenarioId, status, now]
     );
 
-    // 2. Bunu aynı zamanda genel "Event" akışına da ekleyelim (Analiz kolaylığı için)
-    // Böylece: PageView -> Click -> SCENARIO_TRIGGER -> Click sıralaması görülür.
+    // 2. Events Log
     await db.run(
       `INSERT INTO events (session_id, event_type, event_data, page_url, timestamp) 
        VALUES (?, ?, ?, ?, ?)`,
@@ -42,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'SCENARIO_TRIGGERED',
         JSON.stringify({ scenarioId, status, details }),
         req.headers.referer || '/',
-        Date.now()
+        now // Aynı 'now' değişkeni
       ]
     );
 
