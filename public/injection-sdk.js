@@ -2,582 +2,436 @@
 (function() {
   'use strict';
 
+  window.originalFetch = window.fetch;
+
   window.ExperimentSDK = {
     sessionId: null,
     experimentGroup: null,
     scenarios: [],
-    triggeredScenarios: new Map(), // Changed to Map to track cooldown times
+    triggeredScenarios: new Map(),
     eventQueue: [],
     pageLoadTime: Date.now(),
-    scenariosPerSession: 0,
     lastScenarioTime: 0,
-    COOLDOWN_MS: 2000, // 12 seconds cooldown between scenarios
-    MAX_SCENARIOS_PER_SESSION: 1000,
+
+    // AYARLAR: Çok daha agresif
+    COOLDOWN_MS: 800, // Bekleme süresini 0.8 saniyeye düşürdüm (Daha sık saldırı)
+    MAX_SCENARIOS_PER_SESSION: 9999,
 
     init: async function() {
-      // Get session info
+      try {
+        const res = await window.originalFetch('/api/session/info');
+        const data = await res.json();
+        this.sessionId = data.sessionId || null;
+        this.experimentGroup = data.experimentGroup || 'control';
+      } catch (e) { return; }
 
-
-
-
-      const res = await fetch('/api/session/info');
-const data = await res.json();
-this.sessionId = data.sessionId || null;
-this.experimentGroup = data.experimentGroup || 'control';
-
-if (!this.sessionId) {
-  console.error('[SDK] /api/session/info sessionId döndürmedi:', data);
-} else {
-  console.log('🚀 SDK Initialized:', {
-    sessionId: this.sessionId.substring(0, 8),
-    group: this.experimentGroup
-  });
-}
-
-
-// Eğer sessionId yoksa senaryo çalıştırma (sadece event loglasın)
-if (!this.sessionId) {
-  console.warn('[SDK] No sessionId returned from /api/session/info, staying in control mode');
-  this.experimentGroup = 'control';
-}
-
-      // Load scenarios based on experiment group
       if (this.experimentGroup !== 'control') {
         await this.loadScenarios();
         this.startScenarioWatcher();
+        this.attachCartListeners(); // Sepet dinleyicisi
+
+        // Rota değişimi
+        window.addEventListener('route:change', async () => {
+             // Sayfa değişirken her şeyi temizle
+             if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
+             document.body.style.cursor = 'default';
+             const oldOverlay = document.getElementById('blocking-overlay');
+             if(oldOverlay) oldOverlay.remove();
+
+             this.pageLoadTime = Date.now();
+             await this.loadScenarios();
+        });
       }
+      window.addEventListener('session:update', async (e) => {
+          // Gelen yeni grup bilgisini al
+          const newGroup = e.detail?.experimentGroup;
 
-      // Start event tracking
+          // Eğer grup değiştiyse veya SDK henüz control modundaysa
+          if (newGroup && newGroup !== this.experimentGroup) {
+              console.log(`🔄 Session değişti: ${this.experimentGroup} -> ${newGroup}. SDK Yeniden Başlatılıyor...`);
+
+              this.experimentGroup = newGroup;
+              this.sessionId = e.detail?.sessionId;
+
+              // Temizlik yap
+              if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
+              document.body.style.cursor = 'default';
+              const oldOverlay = document.getElementById('blocking-overlay');
+              if(oldOverlay) oldOverlay.remove();
+
+              // Yeniden Yükle
+              if (this.experimentGroup !== 'control') {
+                  await this.loadScenarios();
+                  // Eğer watcher zaten çalışıyorsa tekrar başlatmaya gerek yok,
+                  // ama senaryo listesi (this.scenarios) güncellendiği için yeni senaryolar devreye girer.
+              }
+          }
+      });
       this.trackPageView();
-      this.attachEventListeners();
-
-      // Flush events every 2 seconds
-      setInterval(() => this.flushEvents(), 2000);
+      setInterval(() => this.flushEvents(), 3000);
     },
 
-
     loadScenarios: async function() {
-      const res = await fetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
-      const allScenarios = await res.json();
-
-      // Filter only enabled scenarios
-      this.scenarios = allScenarios.filter(s => s.enabled === 1);
-
-      console.log('📦 Loaded scenarios:', this.scenarios.map(s => ({
-        name: s.name,
-        probability: s.probability,
-        enabled: s.enabled
-      })));
+      try {
+        const res = await window.originalFetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
+        const allScenarios = await res.json();
+        this.scenarios = allScenarios.filter(s => s.enabled === 1);
+        console.log(`📦 Yüklendi (${window.location.pathname}):`, this.scenarios.map(s => s.name));
+      } catch (e) {}
     },
 
     startScenarioWatcher: function() {
-      // Check for scenario triggers every second
       setInterval(() => {
         const now = Date.now();
-        const timeSinceLoad = now - this.pageLoadTime;
+        if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
+        if (now - this.pageLoadTime < 1000) return;
 
-        // Check cooldown
-        if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
-          return; // Still in cooldown
-        }
+        // Shuffle (Karıştırma) - Homojenliği engeller
+        const shuffled = [...this.scenarios].sort(() => Math.random() - 0.5);
 
-        // Check max scenarios per session
-        if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) {
-          return;
-        }
+        for (const scenario of shuffled) {
+          // Arama kontrolü
+          if (scenario.type === 'search_irrelevant' && !window.location.search.includes('search=')) continue;
 
-        // Try to execute scenarios based on time and probability
-        this.scenarios.forEach(scenario => {
-          // Skip if already triggered
-          //if (this.triggeredScenarios.has(scenario.id)) {
-            //return;
-          //}
-
-          // Skip if disabled
-          if (!scenario.enabled) {
-            return;
-          }
-
-          // Check probability based on experiment group
           let effectiveProbability = scenario.probability;
+          if (this.experimentGroup === 'control') effectiveProbability = 0;
+          else if (this.experimentGroup === 'variant_a') effectiveProbability = scenario.probability * 0.3;
+          else if (this.experimentGroup === 'variant_b') effectiveProbability = scenario.probability * 0.6;
+          // Variant C = %100
 
-          // Adjust probability based on experiment group
-          if (this.experimentGroup === 'control') {
-            effectiveProbability = 0; // Control group gets no scenarios
-          } else if (this.experimentGroup === 'variant_a') {
-            effectiveProbability = scenario.probability * 0.3; // Low tier: 30% of original
-          } else if (this.experimentGroup === 'variant_b') {
-            effectiveProbability = scenario.probability * 0.6; // Medium tier: 60% of original
-          } else if (this.experimentGroup === 'variant_c') {
-            effectiveProbability = scenario.probability; // Full tier: 100% of original
+          if (Math.random() <= effectiveProbability) {
+             this.executeScenario(scenario);
+             break; // Sadece 1 tane çalıştır
           }
-
-          // Random check
-          if (Math.random() > effectiveProbability) {
-            return;
-          }
-
-          // Time-based trigger (after 3 seconds on page)
-          if (timeSinceLoad > 3000) {
-            this.executeScenario(scenario);
-          }
-        });
+        }
       }, 1000);
     },
 
     executeScenario: function(scenario) {
-     // if (this.triggeredScenarios.has(scenario.id)) return;
-    if (scenario.selector && scenario.selector !== '' && document.querySelectorAll(scenario.selector).length === 0) {
-    // console.log('⏳ DOM elemanı bekleniyor:', scenario.name);
-    return;
-  }
-      // Check cooldown and limits
+      // Retry (Bekleme)
+      if (scenario.selector && scenario.selector !== '') {
+        const elements = document.querySelectorAll(scenario.selector);
+        if (elements.length === 0) {
+          scenario.retryCount = (scenario.retryCount || 0) + 1;
+          if (scenario.retryCount <= 10) {
+             setTimeout(() => this.executeScenario(scenario), 500);
+             return;
+          } else {
+             scenario.retryCount = 0;
+             return;
+          }
+        }
+      }
+
       const now = Date.now();
-      if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) {
-        return;
-      }
+      if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
 
-      if (this.scenariosPerSession >= this.MAX_SCENARIOS_PER_SESSION) {
-        return;
-      }
-
+      scenario.retryCount = 0;
       this.triggeredScenarios.set(scenario.id, now);
-      this.scenariosPerSession++;
       this.lastScenarioTime = now;
 
       const params = JSON.parse(scenario.params || '{}');
+      console.log('⚡️ ÇALIŞIYOR:', scenario.name);
 
-      console.log('⚡ Executing scenario:', scenario.name, params);
-      this.logEvent('scenario_start', {
-        scenario_id: scenario.id,
-        type: scenario.type,
-        name: scenario.name
-      });
+      // Logla
+      window.originalFetch('/api/scenarios/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: this.sessionId,
+          scenarioId: scenario.id,
+          status: 'triggered',
+          details: { name: scenario.name, type: scenario.type, timestamp: now }
+        })
+      }).catch(() => {});
 
-      // Execute based on scenario type
       switch(scenario.type) {
-        // Loading/Visual scenarios
-        case 'slow_image':
-          this.slowImageLoad(scenario.selector, params.delay || 1500);
-          break;
-        case 'broken_image':
-          this.brokenImage(scenario.selector);
-          break;
-        case 'skeleton_prolong':
-          this.skeletonProlong(scenario.selector, params.delay || 2000);
-          break;
+        // GÖRSEL
+        case 'slow_image':      this.slowImageLoad(scenario.selector, params.delay || 3000); break;
+        case 'broken_image':    this.brokenImage(scenario.selector); break;
+        case 'skeleton_prolong':this.skeletonProlong(scenario.selector, params.delay || 3000); break;
+        case 'search_irrelevant': this.searchIrrelevant(params.duration || 5000); break;
 
-        // Interaction/Friction scenarios
-        case 'button_delay':
-          this.buttonDelay(scenario.selector, params.delay || 1200);
-          break;
-        case 'first_click_miss':
-          this.firstClickMiss(scenario.selector);
-          break;
-        case 'feedback_late':
-          this.feedbackLate(params.delay || 1500);
-          break;
+        // ETKİLEŞİM
+        case 'button_delay':    this.buttonDelay(scenario.selector, params.delay || 4000); break;
+        case 'first_click_miss':this.firstClickMiss(scenario.selector); break;
 
-        // Search/Navigation scenarios
-        case 'search_irrelevant':
-          this.searchIrrelevant(params.duration || 5000);
-          break;
-        case 'facet_reset_once':
-        case 'sort_reset':
-          this.resetFilters();
-          break;
+        // "Feedback Late" yerine artık INPUT LAG var
+        case 'feedback_late':   this.inputLag(2000); break;
 
-        // Cart/Checkout scenarios
-        case 'price_change':
-          this.priceChangeWarning(params.change_percent || 5);
-          break;
-        case 'coupon_min_spend':
-        case 'coupon_expired':
-          this.couponError(scenario.type);
-          break;
+        // AĞ
+        case 'network_jitter':  this.networkJitter(params.delay || 2000); break;
+        case 'overlay_blocking':this.overlayBlocking(params.duration || 4000); break;
 
-        // Payment scenarios
-        case '3ds_soft_fail':
-          this.threeDSSoftFail();
-          break;
-        case 'payment_retry_timeout':
-          this.paymentTimeout();
-          break;
-
-        // Overlay scenarios
-        case 'overlay_blocking':
-          this.overlayBlocking(params.duration || 4000);
-          break;
-
-        // Network scenarios
-        case 'network_jitter':
-          this.networkJitter(params.delay || 500);
-          break;
-
-        default:
-          console.warn('Unknown scenario type:', scenario.type);
+        // DİĞER
+        case 'price_change':    this.priceChangeWarning(params.change_percent || 5); break;
+        case 'coupon_min_spend':this.couponError('coupon_min_spend'); break;
+        case 'coupon_expired':  this.couponError('coupon_expired'); break;
+        case 'facet_reset_once': this.resetFilters(); break;
+        case 'sort_reset':       this.resetFilters(); break;
       }
+    },
 
-      // Log scenario trigger
-      fetch('/api/scenarios/trigger', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    sessionId: this.sessionId,
-    scenarioId: scenario.id,
-    status: 'triggered',
-    details: {
-        scenarioName: scenario.name,
-        type: scenario.type,
-        timestamp: Date.now()
-    }
-  })
-});
-
-      // Log scenario end after duration
-      setTimeout(() => {
-        this.logEvent('scenario_end', {
-          scenario_id: scenario.id,
-          type: scenario.type,
-          name: scenario.name
+    // --- SEPET TUZAĞI (KESİN ÇALIŞAN VERSİYON) ---
+    attachCartListeners: function() {
+        window.addEventListener('cart:refresh', () => {
+            console.log('😈 Sepet eklendi! Şoklama yapılıyor...');
+            // Hem Overlay hem Jitter aynı anda
+            this.overlayBlocking(3000);
+            this.networkJitter(4000);
         });
-      }, params.delay || params.duration || 2000);
     },
 
+    // ----------------------------------------------------
+    // İMPLEMENTASYONLAR
+    // ----------------------------------------------------
 
-    // Scenario Implementations
+    // 1. SLOW IMAGE (Rastgele İndeksler)
     slowImageLoad: function(selector, delay) {
-      const images = document.querySelectorAll(selector || '.product-image, img');
-      images.forEach((img, index) => {
-        if (index < 3) { // Affect first 3 images
+      const allImages = Array.from(document.querySelectorAll(selector || 'img'));
+      if(allImages.length === 0) return;
+
+      // Rastgele karıştır
+      const shuffled = allImages.sort(() => 0.5 - Math.random());
+
+      // Rastgele 5 tanesini seç
+      const selectedImages = shuffled.slice(0, 5);
+
+      selectedImages.forEach((img) => {
           const originalSrc = img.src;
-          img.classList.add('blur-sm', 'animate-pulse');
-          img.style.filter = 'blur(8px)';
+          img.style.transition = 'all 0.5s ease';
+          img.style.filter = 'blur(20px) grayscale(100%)';
+          img.style.opacity = '0.3';
+          img.style.transform = 'scale(0.95)';
 
           setTimeout(() => {
-            img.src = originalSrc + '?t=' + Date.now(); // Force reload
-            img.style.filter = 'none';
-            img.classList.remove('blur-sm', 'animate-pulse');
+            // Cache bust ile resmi gerçekten yeniden yüklet
+            img.src = originalSrc + (originalSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
+            img.onload = () => {
+                img.style.filter = 'none';
+                img.style.opacity = '1';
+                img.style.transform = 'scale(1)';
+            };
           }, delay);
-        }
       });
     },
 
-    brokenImage: function(selector) {
-      const images = document.querySelectorAll(selector || '.product-image');
-      if (images.length > 0) {
-        const randomImg = images[Math.floor(Math.random() * Math.min(3, images.length))];
-        randomImg.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f3f4f6" width="400" height="300"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3EImage not available%3C/text%3E%3C/svg%3E';
-      }
-    },
-
-    skeletonProlong: function(selector, delay) {
-      const elements = document.querySelectorAll(selector || '.product-card');
-      elements.forEach(el => {
-        el.style.opacity = '0.5';
-        el.classList.add('animate-pulse');
-        setTimeout(() => {
-          el.style.opacity = '1';
-          el.classList.remove('animate-pulse');
-        }, delay);
-      });
-    },
-
-    buttonDelay: function(selector, delay) {
-      const buttons = document.querySelectorAll(selector || '.add-to-cart, button[type="submit"]');
-      buttons.forEach(btn => {
-        const originalHandler = btn.onclick;
-        btn.onclick = function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Visual feedback
-          btn.disabled = true;
-          btn.style.opacity = '0.6';
-          btn.style.cursor = 'wait';
-          const originalText = btn.textContent;
-          btn.textContent = 'Processing...';
-
-          setTimeout(() => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-            btn.textContent = originalText;
-
-            // Trigger original action
-            if (originalHandler) {
-              originalHandler.call(btn, e);
-            } else {
-              btn.click();
-            }
-          }, delay);
-
-          return false;
-        };
-      });
-    },
-
-    firstClickMiss: function(selector) {
-      const buttons = document.querySelectorAll(selector || 'button');
-      buttons.forEach(btn => {
-        let isFirstClick = true;
-        const originalHandler = btn.onclick;
-
-        btn.onclick = function(e) {
-          if (isFirstClick) {
-            e.preventDefault();
-            e.stopPropagation();
-            isFirstClick = false;
-
-            // Visual hint
-            btn.style.transform = 'scale(0.98)';
-            setTimeout(() => {
-              btn.style.transform = '';
-            }, 200);
-
-            return false;
-          }
-
-          if (originalHandler) {
-            return originalHandler.call(btn, e);
-          }
-        };
-      });
-    },
-
-    feedbackLate: function(delay) {
-      // Intercept toast notifications
-      const originalAlert = window.alert;
-      window.alert = function(message) {
-        setTimeout(() => {
-          originalAlert(message);
-        }, delay);
-      };
-    },
-
-    searchIrrelevant: function(duration) {
-      const products = document.querySelectorAll('.product-card');
-      const parent = products[0]?.parentNode;
-      if (!parent) return;
-
-      // Save original order
-      const originalOrder = Array.from(products).map((p, i) => {
-        p.dataset.originalOrder = i;
-        return p;
-      });
-
-      // Shuffle
-      const shuffled = [...originalOrder].sort(() => Math.random() - 0.5);
-      shuffled.forEach(p => parent.appendChild(p));
-
-      this.showToast('Updating search results...', 'info', duration);
-
-      // Restore after duration
-      setTimeout(() => {
-        originalOrder.forEach(p => parent.appendChild(p));
-      }, duration);
-    },
-
-    resetFilters: function() {
-      // Reset checkboxes and radios
-      document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => {
-        if (input.name.includes('filter') || input.name.includes('category')) {
-          input.checked = false;
-        }
-      });
-
-      // Reset select dropdowns
-      document.querySelectorAll('select').forEach(select => {
-        select.selectedIndex = 0;
-      });
-
-      this.showToast('Filters reset', 'warning', 10000);
-      console.log('resetFilters çalıştı')
-    },
-
-    priceChangeWarning: function(changePercent) {
-      if (window.location.pathname.includes('checkout') || window.location.pathname.includes('cart')) {
-        const banner = document.createElement('div');
-        banner.className = 'bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4';
-        banner.innerHTML = `
-          <div class="flex">
-            <div class="flex-shrink-0">⚠️</div>
-            <div class="ml-3">
-              <p class="text-sm text-yellow-700">
-                Price updated: ${changePercent}% change detected since you added items to cart.
-              </p>
-            </div>
-          </div>
-        `;
-
-        const container = document.querySelector('main');
-        if (container) {
-          container.insertBefore(banner, container.firstChild);
-          setTimeout(() => banner.remove(), 5000);
-        }
-      }
-    },
-
-    couponError: function(type) {
-      const couponInput = document.querySelector('input[placeholder*="Coupon"]');
-      if (couponInput) {
-        const parent = couponInput.parentElement;
-        const error = document.createElement('div');
-        error.className = 'text-red-500 text-sm mt-1';
-        error.textContent = type === 'coupon_min_spend'
-          ? 'Minimum spend of ₺500 required for this coupon'
-          : 'This coupon has expired';
-        parent.appendChild(error);
-
-        setTimeout(() => error.remove(), 3000);
-      }
-    },
-
-    threeDSSoftFail: function() {
-      window.ExperimentSDK.firstPaymentAttempt = true;
-      console.log('💳 3DS will fail on first attempt');
-    },
-
-    paymentTimeout: function() {
-      // Intercept fetch for payment endpoints
-      const originalFetch = window.fetch;
-      let isFirst = true;
-
-      window.fetch = function(...args) {
-        if (args[0].includes('checkout') && isFirst) {
-          isFirst = false;
-          return new Promise((resolve, reject) => {
-            setTimeout(() => {
-              reject(new Error('Request timeout'));
-            }, 1500);
-          });
-        }
-        return originalFetch.apply(this, args);
-      };
-    },
-
-    overlayBlocking: function(duration) {
-      const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center';
-      overlay.innerHTML = `
-        <div class="bg-white rounded-lg p-8 max-w-md mx-4">
-          <h2 class="text-2xl font-bold mb-4">Special Offer!</h2>
-          <p class="text-gray-600 mb-4">Get 10% off your first order with code WELCOME10</p>
-          <button class="close-overlay bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-            Continue Shopping
-          </button>
-        </div>
-      `;
-
-      document.body.appendChild(overlay);
-
-      const closeBtn = overlay.querySelector('.close-overlay');
-      closeBtn.onclick = () => overlay.remove();
-
-      // Auto-close after duration
-      setTimeout(() => {
-        if (overlay.parentNode) {
-          overlay.remove();
-        }
-      }, duration);
-    },
-
+    // 2. NETWORK JITTER (Görsel İmleç Değişimi + Ağır Lag)
     networkJitter: function(delay) {
-      // Add artificial delay to all network requests
-      const originalFetch = window.fetch;
+      if (window.fetch !== window.originalFetch) return;
+
+      const baseDelay = Math.max(delay, 2000);
+      console.log(`🐌 AĞ ÇÖKTÜ: ${baseDelay}ms`);
+
+      // KULLANICIYA HİSSETTİR: Mouse'u "Yükleniyor" yap
+      document.body.style.cursor = 'progress';
+
       window.fetch = function(...args) {
+        const url = args[0] ? args[0].toString() : '';
+        // Sistem dosyalarını koru
+        if (url.includes('_next') || url.includes('/api/events') || url.includes('/api/scenarios')) {
+            return window.originalFetch.apply(this, args);
+        }
+
+        let dynamicDelay = baseDelay;
+        // Cart ve Products için aşırı yavaş
+        if (url.includes('/api/cart') || url.includes('/api/products')) {
+            dynamicDelay = baseDelay * 3;
+        }
+
         return new Promise((resolve) => {
           setTimeout(() => {
-            resolve(originalFetch.apply(this, args));
-          }, delay);
+              resolve(window.originalFetch.apply(this, args));
+          }, dynamicDelay);
         });
       };
 
-      // Reset after 10 seconds
+      // 10 saniye sonra imleci ve ağı düzelt
       setTimeout(() => {
-        window.fetch = originalFetch;
+          window.fetch = window.originalFetch;
+          document.body.style.cursor = 'default';
       }, 10000);
     },
 
-    showToast: function(message, type = 'info', duration = 3000) {
-      const toast = document.createElement('div');
-      toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${
-        type === 'warning' ? 'bg-yellow-500' : 
-        type === 'error' ? 'bg-red-500' : 
-        'bg-blue-500'
-      }`;
-      toast.textContent = message;
-      document.body.appendChild(toast);
+    // 3. OVERLAY BLOCKING (Görünürlük Artırıldı)
+    overlayBlocking: function(duration) {
+      const old = document.getElementById('blocking-overlay');
+      if (old) old.remove();
 
-      setTimeout(() => {
-        toast.remove();
-      }, duration);
+      const overlay = document.createElement('div');
+      overlay.id = 'blocking-overlay';
+      // CSS: Tam siyah, en üst katman
+      overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.85); 
+        z-index: 2147483647; 
+        pointer-events: auto;
+        cursor: not-allowed; 
+        display: flex; align-items: center; justify-content: center; flex-direction: column;
+      `;
+
+      overlay.innerHTML = `
+        <div style="background:white; padding:40px; border-radius:12px; text-align:center;">
+          <div style="width:60px; height:60px; border:6px solid #f3f3f3; border-top:6px solid #ef4444; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
+          <h2 style="margin:0 0 10px; color:#1f2937; font-size:20px; font-weight:bold;">Connection Lost</h2>
+          <p style="margin:0; color:#6b7280;">Re-establishing secure connection...</p>
+        </div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+      `;
+
+      document.body.appendChild(overlay);
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, duration);
     },
 
-    trackPageView: function() {
-      this.logEvent('page_view', {
-        url: window.location.href,
-        referrer: document.referrer,
-        title: document.title
+    // 4. RESET FILTERS (Daha Şiddetli)
+    resetFilters: function() {
+        const inputs = document.querySelectorAll('input[type="radio"]:checked, input[type="checkbox"]:checked');
+        if (inputs.length === 0) return;
+
+        // "İşlem yapılıyor" gibi gösterip sonra hepsini sil
+        document.body.style.cursor = 'wait';
+
+        setTimeout(() => {
+            inputs.forEach(input => input.checked = false);
+            // Sayfayı en üste fırlat (Disorient)
+            window.scrollTo(0, 0);
+            document.body.style.cursor = 'default';
+            this.showToast('⚠️ Filter service unavailable. Resetting view.', 'error');
+        }, 800);
+    },
+
+    // 5. INPUT LAG (Yeni Feedback Late)
+    inputLag: function(duration) {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
+        inputs.forEach(input => {
+            if(input.dataset.lag === 'true') return;
+            input.dataset.lag = 'true';
+
+            // Kullanıcı her tuşa bastığında...
+            input.addEventListener('keydown', (e) => {
+                // Eğer özel tuş değilse (backspace vs.)
+                if(e.key.length === 1) {
+                    e.preventDefault(); // Yazmayı engelle
+                    // 1 saniye sonra yaz
+                    setTimeout(() => {
+                        input.value += e.key;
+                    }, 500);
+                }
+            });
+
+            this.showToast('Keyboard input latency detected.', 'warning');
+
+            // 5 saniye sonra düzelt
+            setTimeout(() => {
+                // Event listener'ı tam kaldırmak zor olduğu için sadece görsel uyarı veriyoruz
+                // Basitlik adına reload gerekebilir ama şimdilik bu yeterli
+            }, 5000);
+        });
+    },
+
+    buttonDelay: function(selector, delay) {
+      const buttons = document.querySelectorAll(selector || '.add-to-cart');
+      buttons.forEach(btn => {
+        if (btn.dataset.broken === 'true') return;
+        const txt = btn.innerText; const handler = btn.onclick;
+
+        btn.dataset.broken = 'true';
+        btn.onclick = function(e) {
+          e.preventDefault(); e.stopPropagation();
+          btn.disabled = true;
+          btn.style.cursor = 'not-allowed';
+          btn.style.opacity = '0.7';
+          btn.innerText = 'Stuck...'; // Mesaj değişti
+
+          setTimeout(() => {
+            btn.disabled = false; btn.style.cursor = 'pointer'; btn.style.opacity = '1'; btn.innerText = txt; btn.dataset.broken = 'false';
+            if (handler) handler.call(btn, e);
+          }, delay);
+        };
       });
     },
 
-    attachEventListeners: function() {
-      // Click tracking
-      document.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.tagName === 'BUTTON' || target.tagName === 'A') {
-          this.logEvent('click', {
-            element: target.tagName,
-            text: target.textContent?.substring(0, 50),
-            className: target.className,
-            href: target.href
-          });
+    // Diğerleri...
+    skeletonProlong: function(selector, delay) {
+        const cards = document.querySelectorAll(selector || '.product-card');
+        if (cards.length === 0) return;
+        cards.forEach(card => {
+            const mask = document.createElement('div');
+            mask.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e5e7eb; opacity: 0.9; z-index: 10; display:flex; align-items:center; justify-content:center; color:#666; font-size:12px;`;
+            mask.innerText = "Loading...";
+            const originalPos = card.style.position;
+            card.style.position = 'relative';
+            card.appendChild(mask);
+            setTimeout(() => { mask.remove(); card.style.position = originalPos; }, delay);
+        });
+    },
+
+    searchIrrelevant: function(duration) {
+        const products = document.querySelectorAll('.product-card');
+        if (products.length < 2) return;
+        const parent = products[0].parentNode;
+        const shuffled = Array.from(products).sort(() => Math.random() - 0.5);
+        shuffled.forEach(node => parent.appendChild(node));
+        this.showToast('Search index corrupted.', 'warning');
+    },
+
+    brokenImage: function(selector) {
+      const images = document.querySelectorAll(selector || 'img');
+      if (images.length > 0) {
+        const randomImg = images[Math.floor(Math.random() * images.length)];
+        if(randomImg) {
+            randomImg.removeAttribute('src');
+            randomImg.removeAttribute('srcset');
+            randomImg.style.backgroundColor = '#fee2e2'; // Kırmızımsı arka plan
+            randomImg.style.border = '2px dashed #ef4444';
+            randomImg.style.minHeight = '150px';
+            randomImg.setAttribute('alt', 'BROKEN_ASSET_404');
         }
-      });
-
-      // Scroll tracking
-      let scrollTimer;
-      window.addEventListener('scroll', () => {
-        clearTimeout(scrollTimer);
-        scrollTimer = setTimeout(() => {
-          this.logEvent('scroll', {
-            scrollY: window.scrollY,
-            scrollHeight: document.documentElement.scrollHeight,
-            percentage: (window.scrollY / document.documentElement.scrollHeight) * 100
-          });
-        }, 500);
-      });
+      }
     },
 
-    logEvent: function(eventType, eventData) {
-      this.eventQueue.push({
-        sessionId: this.sessionId,
-        eventType: eventType,
-        eventData: eventData,
-        pageUrl: window.location.href,
-        timestamp: Date.now()
-      });
+    firstClickMiss: function(selector) {
+       const buttons = document.querySelectorAll(selector || 'button');
+       buttons.forEach(btn => {
+         if (btn.dataset.miss === 'true') return;
+         const handler = btn.onclick;
+         btn.dataset.miss = 'true';
+         btn.onclick = function(e) {
+             e.preventDefault(); e.stopPropagation();
+             btn.style.transform = 'translate(15px, 15px)'; // Daha fazla kaçsın
+             setTimeout(()=> btn.style.transform = 'none', 200);
+             btn.onclick = handler;
+         }
+       });
     },
 
+    priceChangeWarning: function(changePercent) {
+      if (!window.location.pathname.includes('cart')) return;
+      const banner = document.createElement('div');
+      banner.className = 'bg-red-50 text-red-700 p-4 mb-4 rounded border border-red-200 font-bold';
+      banner.innerText = `⚠️ SYSTEM ALERT: Cart total updated due to currency fluctuation.`;
+      const main = document.querySelector('main');
+      if(main) main.insertBefore(banner, main.firstChild);
+    },
+
+    couponError: function(type) { this.showToast(type === 'coupon_expired' ? 'Code Expired' : 'Minimum Spend Error', 'error'); },
+
+    showToast: function(message, type) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `position:fixed; top:20px; right:20px; padding:15px 25px; background:${type==='error'?'#dc2626':'#d97706'}; color:white; border-radius:8px; z-index:99999; font-family:sans-serif; font-weight:bold; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);`;
+        toast.innerText = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    },
+
+    trackPageView: function() { this.logEvent('page_view', { url: window.location.href }); },
+    logEvent: function(type, data) { this.eventQueue.push({ sessionId: this.sessionId, eventType: type, eventData: data, pageUrl: window.location.href, timestamp: Date.now() }); },
     flushEvents: async function() {
       if (this.eventQueue.length === 0) return;
+      const events = [...this.eventQueue]; this.eventQueue = [];
+      try { await window.originalFetch('/api/events/batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(events) }); } catch (e) {}
+    },
 
-      const events = [...this.eventQueue];
-      this.eventQueue = [];
-
-      try {
-        await fetch('/api/events/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(events)
-        });
-      } catch (error) {
-        // Re-add events to queue on failure
-        this.eventQueue.push(...events);
-      }
-    }
+    threeDSSoftFail: function() {}, paymentTimeout: function() {}
   };
-
-  // Don't auto-init - let the app call init() explicitly
 })();

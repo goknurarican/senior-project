@@ -65,6 +65,10 @@ useEffect(() => {
     const res = await fetch("/api/session/info");
     const data = await res.json();
     setSessionInfo(data);
+    if (typeof window !== 'undefined') {
+        const event = new CustomEvent('session:update', { detail: data });
+        window.dispatchEvent(event);
+    }
   };
 
   const fetchUser = async () => {

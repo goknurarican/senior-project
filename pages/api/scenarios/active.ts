@@ -13,21 +13,16 @@ export default async function handler(
 
   const db = await getDb();
 
-  // DEĞİŞİKLİK BURADA:
-  // CASE WHEN mantığı ile:
-  // 1. target_page "*" DEĞİLSE (yani özel sayfaysa) ona 0 puan ver (öne geçsin)
-  // 2. target_page "*" İSE ona 1 puan ver (arkaya geçsin)
-  // 3. Kendi aralarında RANDOM() sırala.
+  // DEĞİŞİKLİK: 'ORDER BY RANDOM()' kullanarak listeyi her seferinde karıştırıyoruz.
+  // Böylece şans faktörü adil dağılıyor.
   const scenarios = await db.all(
-  `
-  SELECT * FROM scenarios 
-  WHERE (target_page = ? OR target_page = "*")
-  AND enabled = 1
-  ORDER BY 
-    CASE WHEN target_page = '*' THEN 1 ELSE 0 END ASC,
-    RANDOM()
+    `
+    SELECT * FROM scenarios 
+    WHERE (target_page = ? OR target_page = "*")
+    AND enabled = 1
+    ORDER BY RANDOM()
   `,
-  [cleanPath]
-);
+    [cleanPath]
+  );
   res.status(200).json(scenarios);
 }

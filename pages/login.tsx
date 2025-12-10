@@ -12,13 +12,15 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const router: NextRouter = useRouter();
 
+// pages/login.tsx içindeki güncel handleSubmit fonksiyonu
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
-      // Login isteği
+      // 1. Login İsteği
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,36 +30,54 @@ export default function Login() {
       const data: userCookie = await res.json();
 
       if (res.ok) {
-        // Login başarılı - sepeti birleştir
+        // 2. Login Başarılı - Sepeti Birleştir (Mevcut Kodun)
         try {
           const mergeRes = await fetch("/api/cart/merge", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
           });
-
           const mergeData = await mergeRes.json();
-          
           if (mergeData.merged && mergeData.itemCount > 0) {
             console.log(`${mergeData.itemCount} ürün sepete taşındı`);
           }
         } catch (mergeError) {
           console.error("Sepet birleştirme hatası:", mergeError);
-          // Hata olsa bile devam et
         }
 
-        // Cookie'den user bilgilerini al
+        // 👇 3. YENİ EKLENEN KISIM: VARYANT ATAMA (Randomizer) 👇
+        // Kullanıcı artık içeride, "Control" modundan çıkarıp gerçek deneye alalım.
+        try {
+            const variantRes = await fetch('/api/session/assign-variant', { method: 'POST' });
+
+            if (variantRes.ok) {
+                const variantData = await variantRes.json();
+
+                // SDK'ya CANLI SİNYAL gönder: "Hey, grup değişti, reload yapmadan kendini güncelle!"
+                if (typeof window !== 'undefined') {
+                    const event = new CustomEvent('session:update', {
+                        detail: {
+                            sessionId: variantData.sessionId,
+                            experimentGroup: variantData.experimentGroup
+                        }
+                    });
+                    window.dispatchEvent(event);
+                    console.log(`🎲 Login sonrası yeni varyant atandı: ${variantData.experimentGroup}`);
+                }
+            }
+        } catch (variantError) {
+            console.error("Varyant atama servisi hatası:", variantError);
+        }
+        // 👆 VARYANT İŞLEMİ BİTTİ 👆
+
+        // 4. Yönlendirme (Mevcut Kodun)
         const raw: string | undefined = getCookie("user_id") as string;
         const userid: string | null = raw ? JSON.parse(raw) : null;
-        
-        console.log("user cookie id:", userid);
-        console.log("user cookie role:", data.user?.role);
 
-        // Role'e göre yönlendir
         if (data.user?.role === "admin") {
           router.push("/admin");
         } else {
-          console.log("Login successful");
-          router.push("/");
+          // Deney başladı, ürünlere yolla
+          router.push("/products");
         }
       } else {
         setError(data.error || "Login failed");
@@ -69,7 +89,6 @@ export default function Login() {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="max-w-md w-full">
