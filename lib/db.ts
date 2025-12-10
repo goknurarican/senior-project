@@ -133,6 +133,7 @@ async function initDb() {
   await seedScenarios();
 
   // Seed users if empty
+
   const userCount = await db.get("SELECT COUNT(*) as count FROM users");
   if (userCount.count === 0) {
     await seedUsers();
