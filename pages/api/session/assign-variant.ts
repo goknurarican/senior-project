@@ -9,9 +9,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = await getDb();
   const sessionId = getCookie('experiment_session_id', { req, res });
 
+  // Login sırasında set edilen user_id cookie'sini al
+  const userIdRaw = getCookie('user_id', { req, res });
+  const userId = userIdRaw ? JSON.parse(userIdRaw as string) : null;
+
   if (!sessionId) return res.status(400).json({ error: 'No session' });
 
-  // Rastgele Varyant Seçimi (Login Olan Kullanıcı İçin)
+  // Rastgele Varyant Seç
   const r = Math.random();
   let newGroup = 'control';
   if (r < 0.25) newGroup = 'control';
@@ -19,13 +23,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   else if (r < 0.75) newGroup = 'variant_b';
   else newGroup = 'variant_c';
 
-  // Veritabanını Güncelle
+  // Veritabanını Güncelle: Hem grubu değiştir, hem de User ID'yi bağla
   await db.run(
-    'UPDATE sessions SET experiment_group = ? WHERE id = ?',
-    [newGroup, sessionId]
+    'UPDATE sessions SET experiment_group = ?, user_id = ? WHERE id = ?',
+    [newGroup, userId, sessionId]
   );
 
-  console.log(`🎲 Kullanıcı Login Oldu -> Yeni Varyant Atandı: ${newGroup}`);
+  console.log(`🎲 Kullanıcı (ID:${userId}) Login Oldu -> Yeni Varyant: ${newGroup}`);
 
   res.status(200).json({ sessionId, experimentGroup: newGroup });
 }

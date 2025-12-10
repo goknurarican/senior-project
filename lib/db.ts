@@ -33,19 +33,22 @@ export async function getDb() {
 // db parametresini artık dışarıdan alıyoruz
 async function initDb(db: any) {
   await db.exec(`
-    -- Sessions table
+    -- Sessions table(user_id eklendi)
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
+      user_id INTEGER,  -- YENİ: Login olan user buraya yazılacak
       experiment_group TEXT DEFAULT 'control',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       user_agent TEXT,
       ip TEXT
     );
 
-    -- Events table
+    -- Events table (experiment_group eklendi)
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT,
+      user_id INTEGER, -- YENİ: Opsiyonel, analiz kolaylığı için
+      experiment_group TEXT, -- YENİ: Event anındaki grup (Control mü C mi?)
       event_type TEXT,
       event_data TEXT,
       page_url TEXT,

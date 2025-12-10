@@ -425,8 +425,16 @@
     },
 
     trackPageView: function() { this.logEvent('page_view', { url: window.location.href }); },
-    logEvent: function(type, data) { this.eventQueue.push({ sessionId: this.sessionId, eventType: type, eventData: data, pageUrl: window.location.href, timestamp: Date.now() }); },
-    flushEvents: async function() {
+logEvent: function(eventType, eventData) {
+      this.eventQueue.push({
+        sessionId: this.sessionId,
+        experimentGroup: this.experimentGroup, // YENİ: O anki grubu ekle (Control veya Variant)
+        eventType: eventType,
+        eventData: eventData,
+        pageUrl: window.location.href,
+        timestamp: Date.now()
+      });
+    }, flushEvents: async function() {
       if (this.eventQueue.length === 0) return;
       const events = [...this.eventQueue]; this.eventQueue = [];
       try { await window.originalFetch('/api/events/batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(events) }); } catch (e) {}
