@@ -2,6 +2,21 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import getDb from '../../../lib/db';
 
+
+function formatLocalTimestampWithMs() {
+  const d = new Date();
+
+  const year   = d.getFullYear();
+  const month  = String(d.getMonth() + 1).padStart(2, '0');
+  const day    = String(d.getDate()).padStart(2, '0');
+  const hour   = String(d.getHours()).padStart(2, '0');
+  const minute = String(d.getMinutes()).padStart(2, '0');
+  const second = String(d.getSeconds()).padStart(2, '0');
+  const ms     = String(d.getMilliseconds()).padStart(3, '0');
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}:${ms}`;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });

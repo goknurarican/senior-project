@@ -110,9 +110,20 @@ async function initDb() {
 
   // Seed products if empty
   const count = await db.get("SELECT COUNT(*) as count FROM products");
-  if (count.count === 0) {
-    await seedProducts();
+
+  if (count.count > 0) {
+    // Önceki ürünleri sil
+    await db.run("DELETE FROM products");
+
+    // Ürünler silinince, eski sepetlerdeki ID'ler boşa düşeceği için sepeti de temizlemek sağlıklı olur
+    await db.run("DELETE FROM cart_items");
+
+    // ID sayacını sıfırla (İsteğe bağlı, ID'ler 1'den başlasın diye)
+    await db.run("DELETE FROM sqlite_sequence WHERE name='products'");
   }
+
+  // Şimdi tertemiz ve tek kopya olarak yükle
+  await seedProducts();
 
   // Seed scenarios if empty - CLEAR OLD AND RECREATE
   const scenarioCount = await db.get("SELECT COUNT(*) as count FROM scenarios");
