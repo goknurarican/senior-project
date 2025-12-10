@@ -3,20 +3,35 @@ import { open } from "sqlite";
 import sqlite3 from "sqlite3";
 import path from "path";
 
-let db: any = null;
+// TypeScript için global değişken tanımı
+declare global {
+  var dbInstance: any;
+}
 
 export async function getDb() {
-  if (!db) {
-    db = await open({
-      filename: path.join(process.cwd(), "experiment.db"),
-      driver: sqlite3.Database,
-    });
-
-    await initDb();
+  // Eğer globalde zaten açık bir veritabanı varsa, onu kullan.
+  // Bu sayede initDb() tekrar tekrar çalışmaz.
+  if (global.dbInstance) {
+    return global.dbInstance;
   }
+
+  // Yoksa yeni bağlantı aç
+  const db = await open({
+    filename: path.join(process.cwd(), "experiment.db"),
+    driver: sqlite3.Database,
+  });
+
+  // Oluşturulan bağlantıyı globale kaydet
+  global.dbInstance = db;
+
+  // Veritabanı tablolarını ve verilerini kur
+  await initDb(db);
+
   return db;
 }
-async function initDb() {
+
+// db parametresini artık dışarıdan alıyoruz
+async function initDb(db: any) {
   await db.exec(`
     -- Sessions table
     CREATE TABLE IF NOT EXISTS sessions (
@@ -108,40 +123,32 @@ async function initDb() {
     );
   `);
 
-  // Seed products if empty
-  const count = await db.get("SELECT COUNT(*) as count FROM products");
+  // --- ÜRÜN SEED İŞLEMİ (GÜNCELLENDİ) ---
+  // "if count > 0" kontrolünü kaldırdık.
+  // Her zaman temizlik yapıyoruz ki yarış durumu olsa bile temiz başlasın.
 
-  if (count.count > 0) {
-    // Önceki ürünleri sil
-    await db.run("DELETE FROM products");
+  await db.run("DELETE FROM products");
+  await db.run("DELETE FROM cart_items");
+  await db.run("DELETE FROM sqlite_sequence WHERE name='products'");
 
-    // Ürünler silinince, eski sepetlerdeki ID'ler boşa düşeceği için sepeti de temizlemek sağlıklı olur
-    await db.run("DELETE FROM cart_items");
+  // Şimdi temizce ekle
+  await seedProducts(db);
 
-    // ID sayacını sıfırla (İsteğe bağlı, ID'ler 1'den başlasın diye)
-    await db.run("DELETE FROM sqlite_sequence WHERE name='products'");
-  }
 
-  // Şimdi tertemiz ve tek kopya olarak yükle
-  await seedProducts();
+  // --- SENARYO SEED İŞLEMİ ---
+  await db.run("DELETE FROM scenarios");
+  await db.run("DELETE FROM sqlite_sequence WHERE name='scenarios'");
+  await seedScenarios(db);
 
-  // Seed scenarios if empty - CLEAR OLD AND RECREATE
-  const scenarioCount = await db.get("SELECT COUNT(*) as count FROM scenarios");
-  if (scenarioCount.count > 0) {
-    await db.run("DELETE FROM scenarios");
-  }
-  await seedScenarios();
-
-  // Seed users if empty
-
+  // --- KULLANICI SEED İŞLEMİ ---
   const userCount = await db.get("SELECT COUNT(*) as count FROM users");
   if (userCount.count === 0) {
-    await seedUsers();
+    await seedUsers(db);
   }
 }
 
-async function seedProducts() {
-  // ✅ ARKADAŞININ YENİ GÖRSELLERİ İLE GÜNCELLENDİ
+// Fonksiyonlar artık db nesnesini parametre olarak alıyor
+async function seedProducts(db: any) {
   const products = [
     {
       title: "Laptop Pro X1",
@@ -279,8 +286,7 @@ async function seedProducts() {
   }
 }
 
-async function seedScenarios() {
-  // ✅ ORİJİNAL 16 SENARYO KORUNDU (Arkadaşın yanlışlıkla silmişti!)
+async function seedScenarios(db: any) {
   const scenarios = [
     // A) Loading/Visual Scenarios
     {
@@ -430,16 +436,16 @@ async function seedScenarios() {
   for (const s of scenarios) {
     await db.run(
       "INSERT INTO scenarios (name, type, target_page, selector, params, probability, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [s.name, s.type, s.target_page, s.selector, s.params, s.probability, 1] // All enabled by default
+      [s.name, s.type, s.target_page, s.selector, s.params, s.probability, 1]
     );
   }
 }
 
-async function seedUsers() {
+async function seedUsers(db: any) {
   const users = [
     {
       email: 'admin@test.com',
-      password: 'admin123', // In production, use bcrypt
+      password: 'admin123',
       role: 'admin',
       name: 'Admin User'
     },
@@ -458,4 +464,5 @@ async function seedUsers() {
     );
   }
 }
+
 export default getDb;
