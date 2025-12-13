@@ -15,12 +15,15 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const db = await getDb();
+  
+  // **Session ID'yi doğru şekilde çekiyoruz**
   let experiment_session_id = getCookie("experiment_session_id", { req, res });
   console.log("experiment_session_id in cart api:", experiment_session_id);
+
   const user: users | null | undefined = await getUserFromCookie(req, res);
   let effectiveId = user?.id;
-  //user id yoksa guest_id var mı diye bakıyoruz. Guest id de yoksa onu cookie olarak ekliyorum.
 
+  // Eğer user yoksa, guestCookie'yi al
   let guestCookie = getGuestCookie(req, res);
 
   if (!guestCookie && user === null) {
@@ -28,7 +31,11 @@ export default async function handler(
     setGuestCookie(req, res, guestCookie);
   }
 
+  // **Her iki durumda da, session id'yi kullanıyoruz**
+  const sessionId = user ? experiment_session_id : guestCookie;
+
   if (req.method === "GET") {
+    // Cart verilerini alırken, doğru session id'yi kullanıyoruz
     const items = await db.all(
       `
       SELECT cart_items.*, products.title, products.price, products.image 
@@ -36,7 +43,7 @@ export default async function handler(
       JOIN products ON cart_items.product_id = products.id
       WHERE cart_items.session_id = ?
     `,
-      [guestCookie || experiment_session_id]
+      [sessionId]
     );
 
     return res.status(200).json(items);
@@ -44,22 +51,25 @@ export default async function handler(
 
   if (req.method === "POST") {
     const { productId, quantity = 1 } = req.body;
-    console.log("productid : ", productId, "guestCookie : ", guestCookie); // product id geliyor sorun yok.
-    // Check if item exists
+    console.log("productid : ", productId, "sessionId : ", sessionId);
+
+    // Check if item exists for the session
     const existing = await db.get(
       "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ?",
-      [guestCookie || experiment_session_id, productId]
+      [sessionId, productId]
     );
 
     if (existing) {
+      // If the item exists, update quantity
       await db.run(
         "UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
         [quantity, existing.id]
       );
     } else {
+      // Otherwise, insert the new item
       await db.run(
         "INSERT INTO cart_items (session_id, product_id, quantity) VALUES (?, ?, ?)",
-        [guestCookie || experiment_session_id, productId, quantity]
+        [sessionId, productId, quantity]
       );
     }
 
@@ -71,7 +81,7 @@ export default async function handler(
 
     await db.run(
       "DELETE FROM cart_items WHERE session_id = ? AND product_id = ?",
-      [guestCookie || experiment_session_id, productId]
+      [sessionId, productId]
     );
 
     return res.status(200).json({ success: true });
