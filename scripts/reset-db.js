@@ -1,6 +1,6 @@
-import fs from "fs";
-import path from "path";
 // scripts/reset-db.js
+const fs = require("fs");
+const path = require("path");
 
 const dbPath = path.join(process.cwd(), "experiment.db");
 

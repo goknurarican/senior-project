@@ -3,15 +3,16 @@ import Layout from "../components/Layout";
 import { ChangeEvent, useEffect, useState } from "react";
 import { NextRouter, useRouter } from "next/router";
 import { products } from "../types/types";
-import { getCookie } from "cookies-next";
 
 export default function Products() {
   const [products, setProducts] = useState<products[]>([]);
   const [searchInput, setSearchInput] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("featured");
   const [loading, setLoading] = useState<boolean>(true);
+
   const router: NextRouter = useRouter();
   const { category, search } = router.query;
+
   useEffect(() => {
     fetchProducts();
   }, [category, search]);
@@ -45,33 +46,37 @@ export default function Products() {
 
   const sortedProducts = getSortedProducts();
 
-const addToCart = async (productId: number, productTitle: string) => {
-  // 1. SDK Event'i (Senin mevcut kodun - dokunmuyoruz)
-  const cartEvent = new CustomEvent("cart:add", {
-    detail: {
-      productId,
-      productTitle,
-      timestamp: Date.now(),
-    },
-  });
-  window.dispatchEvent(cartEvent);
-  console.log("[Products] cart:add event dispatched:", productTitle);
+  // NOT: event (e) parametresi eklendi, böylece kart tıklamasını engelleyebiliriz.
+  const addToCart = async (e: React.MouseEvent, productId: number, productTitle: string) => {
+    // 1. ÖNEMLİ: Kartın tıklanma olayını durdur (Detay sayfasına gitmesin)
+    e.stopPropagation();
 
-  // 2. API İsteği
-  const res = await fetch("/api/cart", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ productId }),
-  });
+    // 2. SDK Event'i (Mevcut kodun)
+    const cartEvent = new CustomEvent("cart:add", {
+      detail: {
+        productId,
+        productTitle,
+        timestamp: Date.now(),
+      },
+    });
+    window.dispatchEvent(cartEvent);
+    console.log("[Products] cart:add event dispatched:", productTitle);
 
-  if (res.ok) {
-    // 3. DEĞİŞİKLİK BURADA:
-    // Hard reload'u sildik. Yerine Navbar'a "git sepeti güncelle" diyoruz.
-    window.dispatchEvent(new Event("cart:refresh"));
-    console.log("Navbar'a güncelleme sinyali gönderildi.");
-  }
-};
-const handleSearch = (e: React.FormEvent) => {
+    // 3. API İsteği
+    const res = await fetch("/api/cart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId }),
+    });
+
+    if (res.ok) {
+      // 4. Navbar güncelleme sinyali
+      window.dispatchEvent(new Event("cart:refresh"));
+      console.log("Navbar'a güncelleme sinyali gönderildi.");
+    }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
       const params = new URLSearchParams();
@@ -88,11 +93,11 @@ const handleSearch = (e: React.FormEvent) => {
       }
     }
   };
-  console.log("sorted products : ", sortedProducts);
+
   return (
     <Layout>
       <div className="products-page flex gap-8 min-h-screen">
-        {/* Filters */}
+        {/* Filters Sidebar (Sol Taraf) */}
         <div className="w-64">
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="font-bold mb-4">Filters</h3>
@@ -114,9 +119,7 @@ const handleSearch = (e: React.FormEvent) => {
                     type="radio"
                     name="category"
                     checked={category === "electronics"}
-                    onChange={() =>
-                      router.push("/products?category=electronics")
-                    }
+                    onChange={() => router.push("/products?category=electronics")}
                   />
                   <span className="ml-2">Electronics</span>
                 </label>
@@ -156,8 +159,7 @@ const handleSearch = (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* Products Grid */}
-
+        {/* Products Grid (Sağ Taraf) */}
         <div className="flex-1 ">
           <div className="mb-4 flex justify-between items-center ">
             <h1 className="text-2xl font-bold">
@@ -196,7 +198,9 @@ const handleSearch = (e: React.FormEvent) => {
                 <div
                   key={product.id}
                   data-order={index}
-                  className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow product-card"
+                  // YENİ: Karta tıklayınca detay sayfasına git
+                  onClick={() => router.push(`/product/${product.id}`)}
+                  className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow product-card cursor-pointer relative"
                 >
                   <img
                     src={product.image}
@@ -213,17 +217,18 @@ const handleSearch = (e: React.FormEvent) => {
                         ₺{product.price}
                       </span>
                       <button
-                        onClick={() => addToCart(product.id, product.title)}
+                        // YENİ: Event'i pass ediyoruz (e)
+                        onClick={(e) => addToCart(e, product.id, product.title)}
                         className="
-    bg-gradient-to-r from-indigo-500 to-blue-600
-    hover:from-indigo-400 hover:to-blue-500
-    active:from-indigo-600 active:to-blue-700
-    text-white font-medium
-    px-3 py-1.5
-    rounded-lg
-    shadow-md hover:shadow-lg
-    transition-all duration-200
-  "
+                          bg-gradient-to-r from-indigo-500 to-blue-600
+                          hover:from-indigo-400 hover:to-blue-500
+                          active:from-indigo-600 active:to-blue-700
+                          text-white font-medium
+                          px-3 py-1.5
+                          rounded-lg
+                          shadow-md hover:shadow-lg
+                          transition-all duration-200
+                        "
                       >
                         Add to Cart
                       </button>

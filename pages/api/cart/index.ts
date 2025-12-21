@@ -15,18 +15,24 @@ export default async function handler(
   res: NextApiResponse
 ) {
   const db = await getDb();
+
+  // 1. Experiment Session ID'yi çek
   let experiment_session_id = getCookie("experiment_session_id", { req, res });
   console.log("experiment_session_id in cart api:", experiment_session_id);
-  const user: users | null | undefined = await getUserFromCookie(req, res);
-  let effectiveId = user?.id;
-  //user id yoksa guest_id var mı diye bakıyoruz. Guest id de yoksa onu cookie olarak ekliyorum.
 
+  const user: users | null | undefined = await getUserFromCookie(req, res);
+
+  // 2. Guest Cookie kontrolü
   let guestCookie = getGuestCookie(req, res);
 
   if (!guestCookie && user === null) {
     guestCookie = v4();
     setGuestCookie(req, res, guestCookie);
   }
+
+  // 3. KRİTİK DEĞİŞİKLİK: Hangi ID'nin kullanılacağına burada karar veriyoruz.
+  // Kullanıcı varsa experiment id, yoksa guest cookie kullanılır.
+  const sessionId = user ? experiment_session_id : guestCookie;
 
   if (req.method === "GET") {
     const items = await db.all(
@@ -36,7 +42,7 @@ export default async function handler(
       JOIN products ON cart_items.product_id = products.id
       WHERE cart_items.session_id = ?
     `,
-      [guestCookie || experiment_session_id]
+      [sessionId] // Artık karmaşık OR mantığı yerine tek değişken
     );
 
     return res.status(200).json(items);
@@ -44,11 +50,12 @@ export default async function handler(
 
   if (req.method === "POST") {
     const { productId, quantity = 1 } = req.body;
-    console.log("productid : ", productId, "guestCookie : ", guestCookie); // product id geliyor sorun yok.
-    // Check if item exists
+    console.log("productid : ", productId, "sessionId : ", sessionId);
+
+    // Ürün zaten var mı kontrol et
     const existing = await db.get(
       "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ?",
-      [guestCookie || experiment_session_id, productId]
+      [sessionId, productId]
     );
 
     if (existing) {
@@ -59,7 +66,7 @@ export default async function handler(
     } else {
       await db.run(
         "INSERT INTO cart_items (session_id, product_id, quantity) VALUES (?, ?, ?)",
-        [guestCookie || experiment_session_id, productId, quantity]
+        [sessionId, productId, quantity]
       );
     }
 
@@ -71,7 +78,7 @@ export default async function handler(
 
     await db.run(
       "DELETE FROM cart_items WHERE session_id = ? AND product_id = ?",
-      [guestCookie || experiment_session_id, productId]
+      [sessionId, productId]
     );
 
     return res.status(200).json({ success: true });
