@@ -1,7 +1,31 @@
 // public/injection-sdk.js
-(function() {
-  'use strict';
+(function () {
+  "use strict";
 
+  // Tarayıcının orijinal alert'ini saklıyoruz (sonradan çağırabilmek için)
+  window.__originalAlert__ = window.alert;
+
+  // Feedback Late senaryosu için alert'i yeniden tanımlıyoruz
+  window.alert = function (message) {
+
+    // Feedback Late açıksa → bildirim gecikmeli çıkacak
+    // (Input lag'e ek olarak geri bildirim gecikmesi sağlanır)
+    if (window.__FEEDBACK_LATE__) {
+      setTimeout(() => {
+        window.__originalAlert__(message); // gecikmiş alert
+      }, 1200); // 1.2 saniye gecikme
+    }
+
+    // Feedback Late kapalıysa → alert normal şekilde hemen çıkar
+    else {
+      window.__originalAlert__(message);
+    }
+  };
+})(); 
+
+
+
+   
   window.originalFetch = window.fetch;
 
   window.ExperimentSDK = {
@@ -13,8 +37,8 @@
     pageLoadTime: Date.now(),
     lastScenarioTime: 0,
 
-    // AYARLAR: Çok daha agresif
-    COOLDOWN_MS: 800, // Bekleme süresini 0.8 saniyeye düşürdüm (Daha sık saldırı)
+    // AYARLAR: Çok daha normal değerler, gerçek dünyaya uygun
+    COOLDOWN_MS: 5000, 
     MAX_SCENARIOS_PER_SESSION: 9999,
 
     init: async function() {
@@ -35,6 +59,7 @@
              // Sayfa değişirken her şeyi temizle
              if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
              document.body.style.cursor = 'default';
+
              const oldOverlay = document.getElementById('blocking-overlay');
              if(oldOverlay) oldOverlay.remove();
 
@@ -85,7 +110,7 @@
         const now = Date.now();
         if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
         if (now - this.pageLoadTime < 1000) return;
-
+        
         // Shuffle (Karıştırma) - Homojenliği engeller
         const shuffled = [...this.scenarios].sort(() => Math.random() - 0.5);
 
@@ -168,7 +193,8 @@
         case 'coupon_min_spend':this.couponError('coupon_min_spend'); break;
         case 'coupon_expired':  this.couponError('coupon_expired'); break;
         case 'facet_reset_once': this.resetFilters(); break;
-        case 'sort_reset':       this.resetFilters(); break;
+        // Sort reset (dropdown için)
+        case 'sort_reset': window.dispatchEvent(new Event('sort:reset')); break;
       }
     },
 
@@ -285,71 +311,94 @@
 
     // 4. RESET FILTERS (Daha Şiddetli)
     resetFilters: function() {
-        const inputs = document.querySelectorAll('input[type="radio"]:checked, input[type="checkbox"]:checked');
-        if (inputs.length === 0) return;
+    document.body.style.cursor = 'wait';
 
-        // "İşlem yapılıyor" gibi gösterip sonra hepsini sil
-        document.body.style.cursor = 'wait';
+    setTimeout(() => {
+        // 1️⃣ DOM reset
+        const radios = document.querySelectorAll('input[type="radio"]');
+        radios.forEach(radio => {
+            if (radio.value === 'all') radio.checked = true;
+            else radio.checked = false;
+        });
+
+        const searches = document.querySelectorAll('input[type="search"], input[type="text"]');
+        searches.forEach(input => input.value = '');
+
+        // 2️⃣ React & URL ile uyum
+        const url = new URL(window.location.href);
+        url.searchParams.delete('category');
+        url.searchParams.delete('search');
+        window.history.replaceState({}, '', url.toString());
+
+        // 3️⃣ React component tetikleme
+        window.dispatchEvent(new Event('filters:reset'));
+
+        document.body.style.cursor = 'default';
+        this.showToast('⚠️ Filters reset to All.', 'info');
+
+        // Scroll reset
+        window.scrollTo(0, 0);
+    }, 800);
+    },
+
+
+// ----------------------------------------------------
+// 5. INPUT LAG (Yeni Feedback Late)
+// ----------------------------------------------------
+inputLag: function(duration) {
+    const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
+    inputs.forEach(input => {
+        if(input.dataset.lag === 'true') return;
+        input.dataset.lag = 'true';
+        let timer = null;
+
+        const handler = (e) => {
+            if(e.key.length === 1) {
+                e.preventDefault();
+                clearTimeout(timer);
+                timer = setTimeout(() => { input.value += e.key; }, 500);
+            }
+        };
+
+        input.addEventListener('keydown', handler);
+        this.showToast('Keyboard input latency detected.', 'warning');
 
         setTimeout(() => {
-            inputs.forEach(input => input.checked = false);
-            // Sayfayı en üste fırlat (Disorient)
-            window.scrollTo(0, 0);
-            document.body.style.cursor = 'default';
-            this.showToast('⚠️ Filter service unavailable. Resetting view.', 'error');
-        }, 800);
-    },
-
-    // 5. INPUT LAG (Yeni Feedback Late)
-    inputLag: function(duration) {
-        const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
-        inputs.forEach(input => {
-            if(input.dataset.lag === 'true') return;
-            input.dataset.lag = 'true';
-
-            // Kullanıcı her tuşa bastığında...
-            input.addEventListener('keydown', (e) => {
-                // Eğer özel tuş değilse (backspace vs.)
-                if(e.key.length === 1) {
-                    e.preventDefault(); // Yazmayı engelle
-                    // 1 saniye sonra yaz
-                    setTimeout(() => {
-                        input.value += e.key;
-                    }, 500);
-                }
-            });
-
-            this.showToast('Keyboard input latency detected.', 'warning');
-
-            // 5 saniye sonra düzelt
-            setTimeout(() => {
-                // Event listener'ı tam kaldırmak zor olduğu için sadece görsel uyarı veriyoruz
-                // Basitlik adına reload gerekebilir ama şimdilik bu yeterli
-            }, 5000);
-        });
-    },
+            input.removeEventListener('keydown', handler);
+            input.dataset.lag = 'false';
+        }, duration);
+    });
+},
 
     buttonDelay: function(selector, delay) {
-      const buttons = document.querySelectorAll(selector || '.add-to-cart');
-      buttons.forEach(btn => {
-        if (btn.dataset.broken === 'true') return;
-        const txt = btn.innerText; const handler = btn.onclick;
+  const buttons = document.querySelectorAll(selector || '.add-to-cart');
+  buttons.forEach(btn => {
+    if (btn.dataset.broken === 'true') return;
+    btn.dataset.broken = 'true';
+    const txt = btn.innerText;
 
-        btn.dataset.broken = 'true';
-        btn.onclick = function(e) {
-          e.preventDefault(); e.stopPropagation();
-          btn.disabled = true;
-          btn.style.cursor = 'not-allowed';
-          btn.style.opacity = '0.7';
-          btn.innerText = 'Stuck...'; // Mesaj değişti
+    const handler = function(e) {
+      e.preventDefault();
+      e.stopImmediatePropagation(); // React handler dahil tüm handler'ları durdur
+      btn.disabled = true;
+      btn.style.cursor = 'not-allowed';
+      btn.style.opacity = '0.7';
+      btn.innerText = 'Stuck...';
 
-          setTimeout(() => {
-            btn.disabled = false; btn.style.cursor = 'pointer'; btn.style.opacity = '1'; btn.innerText = txt; btn.dataset.broken = 'false';
-            if (handler) handler.call(btn, e);
-          }, delay);
-        };
-      });
-    },
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.style.cursor = 'pointer';
+        btn.style.opacity = '1';
+        btn.innerText = txt;
+        btn.dataset.broken = 'false';
+        btn.removeEventListener('click', handler, true); // ← EKLENECEK
+      }, delay);
+    };
+
+    btn.addEventListener('click', handler, true); // capture: true
+  });
+},
+
 
     // Diğerleri...
     skeletonProlong: function(selector, delay) {
@@ -391,30 +440,39 @@
     },
 
     firstClickMiss: function(selector) {
-       const buttons = document.querySelectorAll(selector || 'button');
-       buttons.forEach(btn => {
-         if (btn.dataset.miss === 'true') return;
-         const handler = btn.onclick;
-         btn.dataset.miss = 'true';
-         btn.onclick = function(e) {
-             e.preventDefault(); e.stopPropagation();
-             btn.style.transform = 'translate(15px, 15px)'; // Daha fazla kaçsın
-             setTimeout(()=> btn.style.transform = 'none', 200);
-             btn.onclick = handler;
-         }
-       });
-    },
+    const buttons = document.querySelectorAll(selector || 'button');
+    buttons.forEach(btn => {
+        if (btn.dataset.miss === 'true') return;
+        btn.dataset.miss = 'true';
+
+        const handler = (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation(); // React dahil tüm click handler'ları durdur
+            btn.style.transform = 'translate(15px, 15px)'; 
+            setTimeout(() => btn.style.transform = 'none', 200);
+        };
+
+        btn.addEventListener('click', handler, true); // capture: true
+
+        // İstersen 500ms sonra listener’ı temizle
+        setTimeout(() => {
+            btn.removeEventListener('click', handler, true);
+            btn.dataset.miss = 'false';
+        }, 500);
+    });
+},
+
 
     priceChangeWarning: function(changePercent) {
       if (!window.location.pathname.includes('cart')) return;
       const banner = document.createElement('div');
       banner.className = 'bg-red-50 text-red-700 p-4 mb-4 rounded border border-red-200 font-bold';
-      banner.innerText = `⚠️ SYSTEM ALERT: Cart total updated due to currency fluctuation.`;
+      banner.innerText = `⚠️ UYARI: Sepet toplamı döviz dalgalanması nedeniyle güncellendi.`;
       const main = document.querySelector('main');
       if(main) main.insertBefore(banner, main.firstChild);
     },
 
-    couponError: function(type) { this.showToast(type === 'coupon_expired' ? 'Code Expired' : 'Minimum Spend Error', 'error'); },
+    couponError: function(type) { this.showToast(type === 'coupon_expired' ? 'Code Expired' : '⚠️ Kupon Süresi Dolmuş', 'error'); },
 
     showToast: function(message, type) {
         const toast = document.createElement('div');
@@ -442,4 +500,3 @@ logEvent: function(eventType, eventData) {
 
     threeDSSoftFail: function() {}, paymentTimeout: function() {}
   };
-})();
