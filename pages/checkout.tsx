@@ -215,7 +215,6 @@ export default function Checkout() {
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-sm text-yellow-800">Test Mode: Use card number 4242 4242 4242 4242</p>
             </div>
 
             <input name="cardNumber" placeholder="Card Number" className="border p-2 rounded w-full mb-1" value={formData.cardNumber} onChange={handleInputChange} />
