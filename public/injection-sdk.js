@@ -9,7 +9,6 @@
   window.alert = function (message) {
 
     // Feedback Late açıksa → bildirim gecikmeli çıkacak
-    // (Input lag'e ek olarak geri bildirim gecikmesi sağlanır)
     if (window.__FEEDBACK_LATE__) {
       setTimeout(() => {
         window.__originalAlert__(message); // gecikmiş alert
@@ -21,557 +20,425 @@
       window.__originalAlert__(message);
     }
   };
-})(); 
+})();
 
+window.originalFetch = window.fetch;
 
+window.ExperimentSDK = {
+  sessionId: null,
+  experimentGroup: null,
+  scenarios: [],
+  triggeredScenarios: new Map(),
+  eventQueue: [],
+  pageLoadTime: Date.now(),
+  lastScenarioTime: 0,
 
-   
-  window.originalFetch = window.fetch;
+  // === MOUSE TRACKING ===
+  mouseTrajectory: [],
+  lastMouseTime: 0,
+  MOUSE_THROTTLE_MS: 100,
+  experimentStartTime: performance.now(),
+  // ======================
 
-  window.ExperimentSDK = {
-    sessionId: null,
-    experimentGroup: null,
-    scenarios: [],
-    triggeredScenarios: new Map(),
-    eventQueue: [],
-    pageLoadTime: Date.now(),
-    lastScenarioTime: 0,
-    ////////////////////yeni eklenen
-    // === MOUSE TRACKING ===
-    mouseTrajectory: [],
-    lastMouseTime: 0,
-    MOUSE_THROTTLE_MS: 100,
-    experimentStartTime: performance.now(),
-    // ======================
-    /////////////////////
+  // AYARLAR (ML Verisi İçin İdeal Cooldown: 5 Saniye)
+  COOLDOWN_MS: 5000,
+  MAX_SCENARIOS_PER_SESSION: 9999,
 
-    // AYARLAR: Çok daha normal değerler, gerçek dünyaya uygun
-    COOLDOWN_MS: 5000, 
-    MAX_SCENARIOS_PER_SESSION: 9999,
+  init: async function() {
+    try {
+      const res = await window.originalFetch('/api/session/info');
+      const data = await res.json();
+      this.sessionId = data.sessionId || null;
+      this.experimentGroup = data.experimentGroup || 'control';
+    } catch (e) { return; }
 
-    init: async function() {
-      try {
-        const res = await window.originalFetch('/api/session/info');
-        const data = await res.json();
-        this.sessionId = data.sessionId || null;
-        this.experimentGroup = data.experimentGroup || 'control';
-      } catch (e) { return; }
+    if (this.experimentGroup !== 'control') {
+      await this.loadScenarios();
+      this.startScenarioWatcher();
+      this.attachCartListeners(); // Sepet dinleyicisi
 
-      if (this.experimentGroup !== 'control') {
-        await this.loadScenarios();
-        this.startScenarioWatcher();
-        this.attachCartListeners(); // Sepet dinleyicisi
+      // Rota değişimi
+      window.addEventListener('route:change', async () => {
+           if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
+           document.body.style.cursor = 'default';
 
-        // Rota değişimi
-        window.addEventListener('route:change', async () => {
-             // Sayfa değişirken her şeyi temizle
-             if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
-             document.body.style.cursor = 'default';
+           const oldOverlay = document.getElementById('blocking-overlay');
+           if(oldOverlay) oldOverlay.remove();
 
-             const oldOverlay = document.getElementById('blocking-overlay');
-             if(oldOverlay) oldOverlay.remove();
-
-             this.pageLoadTime = Date.now();
-             await this.loadScenarios();
-        });
-      }
-      window.addEventListener('session:update', async (e) => {
-          // Gelen yeni grup bilgisini al
-          const newGroup = e.detail?.experimentGroup;
-
-          // Eğer grup değiştiyse veya SDK henüz control modundaysa
-          if (newGroup && newGroup !== this.experimentGroup) {
-              console.log(`🔄 Session değişti: ${this.experimentGroup} -> ${newGroup}. SDK Yeniden Başlatılıyor...`);
-
-              this.experimentGroup = newGroup;
-              this.sessionId = e.detail?.sessionId;
-
-              // Temizlik yap
-              if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
-              document.body.style.cursor = 'default';
-              const oldOverlay = document.getElementById('blocking-overlay');
-              if(oldOverlay) oldOverlay.remove();
-
-              // Yeniden Yükle
-              if (this.experimentGroup !== 'control') {
-                  await this.loadScenarios();
-                  // Eğer watcher zaten çalışıyorsa tekrar başlatmaya gerek yok,
-                  // ama senaryo listesi (this.scenarios) güncellendiği için yeni senaryolar devreye girer.
-              }
-          }
+           this.pageLoadTime = Date.now();
+           await this.loadScenarios();
       });
-      this.trackPageView();
-      // çalıştırmak için yeni eklendi burası mouse tracking
-      this.initMouseTracking();
-      /////// çalıştırmak için
-      setInterval(() => this.flushEvents(), 3000);
-    },
+    }
+    window.addEventListener('session:update', async (e) => {
+        const newGroup = e.detail?.experimentGroup;
 
-    loadScenarios: async function() {
-      try {
-        const res = await window.originalFetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
-        const allScenarios = await res.json();
-        this.scenarios = allScenarios.filter(s => s.enabled === 1);
-        console.log(`📦 Yüklendi (${window.location.pathname}):`, this.scenarios.map(s => s.name));
-      } catch (e) {}
-    },
+        if (newGroup && newGroup !== this.experimentGroup) {
+            console.log(`🔄 Session değişti: ${this.experimentGroup} -> ${newGroup}. SDK Yeniden Başlatılıyor...`);
 
-    startScenarioWatcher: function() {
-      setInterval(() => {
-        const now = Date.now();
-        if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
-        if (now - this.pageLoadTime < 1000) return;
-        
-        // Shuffle (Karıştırma) - Homojenliği engeller
-        const shuffled = [...this.scenarios].sort(() => Math.random() - 0.5);
+            this.experimentGroup = newGroup;
+            this.sessionId = e.detail?.sessionId;
 
-        for (const scenario of shuffled) {
-          // Arama kontrolü
-          if (scenario.type === 'search_irrelevant' && !window.location.search.includes('search=')) continue;
+            if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
+            document.body.style.cursor = 'default';
+            const oldOverlay = document.getElementById('blocking-overlay');
+            if(oldOverlay) oldOverlay.remove();
 
-          let effectiveProbability = scenario.probability;
-          if (this.experimentGroup === 'control') effectiveProbability = 0;
-          else if (this.experimentGroup === 'variant_a') effectiveProbability = scenario.probability * 0.3;
-          else if (this.experimentGroup === 'variant_b') effectiveProbability = scenario.probability * 0.6;
-          // Variant C = %100
-
-          if (Math.random() <= effectiveProbability) {
-             this.executeScenario(scenario);
-             break; // Sadece 1 tane çalıştır
-          }
+            if (this.experimentGroup !== 'control') {
+                await this.loadScenarios();
+            }
         }
-      }, 1000);
-    },
+    });
+    this.trackPageView();
+    this.initMouseTracking();
+    setInterval(() => this.flushEvents(), 3000);
+  },
 
-    executeScenario: function(scenario) {
-      // Retry (Bekleme)
-      if (scenario.selector && scenario.selector !== '') {
-        const elements = document.querySelectorAll(scenario.selector);
-        if (elements.length === 0) {
-          scenario.retryCount = (scenario.retryCount || 0) + 1;
-          if (scenario.retryCount <= 10) {
-             setTimeout(() => this.executeScenario(scenario), 500);
-             return;
-          } else {
-             scenario.retryCount = 0;
-             return;
-          }
-        }
-      }
+  loadScenarios: async function() {
+    try {
+      const res = await window.originalFetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
+      const allScenarios = await res.json();
+      this.scenarios = allScenarios.filter(s => s.enabled === 1);
+      console.log(`📦 Yüklendi (${window.location.pathname}):`, this.scenarios.map(s => s.name));
+    } catch (e) {}
+  },
 
+  startScenarioWatcher: function() {
+    setInterval(() => {
       const now = Date.now();
       if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
+      if (now - this.pageLoadTime < 1000) return;
 
-      scenario.retryCount = 0;
-      this.triggeredScenarios.set(scenario.id, now);
-      this.lastScenarioTime = now;
+      const shuffled = [...this.scenarios].sort(() => Math.random() - 0.5);
 
-      const params = JSON.parse(scenario.params || '{}');
-      console.log('⚡️ ÇALIŞIYOR:', scenario.name);
+      for (const scenario of shuffled) {
+        if (scenario.type === 'search_irrelevant' && !window.location.search.includes('search=')) continue;
 
-      // Logla
-      window.originalFetch('/api/scenarios/trigger', {
+        let effectiveProbability = scenario.probability;
+        if (this.experimentGroup === 'control') effectiveProbability = 0;
+        else if (this.experimentGroup === 'variant_a') effectiveProbability = scenario.probability * 0.3;
+        else if (this.experimentGroup === 'variant_b') effectiveProbability = scenario.probability * 0.6;
+
+        if (Math.random() <= effectiveProbability) {
+           this.executeScenario(scenario);
+           break;
+        }
+      }
+    }, 1000);
+  },
+
+  executeScenario: function(scenario) {
+    if (scenario.selector && scenario.selector !== '') {
+      const elements = document.querySelectorAll(scenario.selector);
+      if (elements.length === 0) {
+        scenario.retryCount = (scenario.retryCount || 0) + 1;
+        if (scenario.retryCount <= 10) {
+           setTimeout(() => this.executeScenario(scenario), 500);
+           return;
+        } else {
+           scenario.retryCount = 0;
+           return;
+        }
+      }
+    }
+
+    const now = Date.now();
+    if (this.lastScenarioTime && (now - this.lastScenarioTime) < this.COOLDOWN_MS) return;
+
+    scenario.retryCount = 0;
+    this.triggeredScenarios.set(scenario.id, now);
+    this.lastScenarioTime = now;
+
+    const params = JSON.parse(scenario.params || '{}');
+    console.log('⚡️ ÇALIŞIYOR:', scenario.name);
+
+    // ====================================================
+    // DONANIMSAL MARKER GÖNDERİMİ (PYTHON SUNUCUSUNA)
+    // ====================================================
+      // local host 5000 olmalı windowsta
+    try {
+      window.originalFetch('http://127.0.0.1:5001/send_negative_trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: this.sessionId,
-          scenarioId: scenario.id,
-          status: 'triggered',
-          details: { name: scenario.name, type: scenario.type, timestamp: now }
-        })
+        body: JSON.stringify({ scenario: scenario.name })
       }).catch(() => {});
-
-      switch(scenario.type) {
-        // GÖRSEL
-        case 'slow_image':      this.slowImageLoad(scenario.selector, params.delay || 3000); break;
-        case 'broken_image':    this.brokenImage(scenario.selector); break;
-        case 'skeleton_prolong':this.skeletonProlong(scenario.selector, params.delay || 3000); break;
-        case 'search_irrelevant': this.searchIrrelevant(params.duration || 5000); break;
-
-        // ETKİLEŞİM
-        case 'button_delay':    this.buttonDelay(scenario.selector, params.delay || 4000); break;
-        case 'first_click_miss':this.firstClickMiss(scenario.selector); break;
-
-        // "Feedback Late" yerine artık INPUT LAG var
-        case 'feedback_late':   this.inputLag(2000); break;
-
-        // AĞ
-        case 'network_jitter':  this.networkJitter(params.delay || 2000); break;
-        case 'overlay_blocking':this.overlayBlocking(params.duration || 4000); break;
-
-        // DİĞER
-        case 'price_change':    this.priceChangeWarning(params.change_percent || 5); break;
-        case 'coupon_min_spend':this.couponError('coupon_min_spend'); break;
-        case 'coupon_expired':  this.couponError('coupon_expired'); break;
-        case 'facet_reset_once': this.resetFilters(); break;
-        // Sort reset (dropdown için)
-        case 'sort_reset': window.dispatchEvent(new Event('sort:reset')); break;
-      }
-    },
-
-    // --- SEPET TUZAĞI (KESİN ÇALIŞAN VERSİYON) ---
-    attachCartListeners: function() {
-        window.addEventListener('cart:refresh', () => {
-            console.log('😈 Sepet eklendi! Şoklama yapılıyor...');
-            // Hem Overlay hem Jitter aynı anda
-            this.overlayBlocking(3000);
-            this.networkJitter(4000);
-        });
-    },
-       
-    /////////////////////// yeni eklenen kısım
-     // --- MOUSE TRACKING ---
-    initMouseTracking: function() {
-
-  document.addEventListener('mousemove', (e) => {
-    const now = performance.now();
-
-    if (now - this.lastMouseTime > this.MOUSE_THROTTLE_MS) {
-      this.mouseTrajectory.push({
-        x: e.clientX,
-        y: e.clientY,
-        t: now - this.experimentStartTime
-      });
-
-      this.lastMouseTime = now;
-
-      if (this.mouseTrajectory.length > 500) {
-        this.mouseTrajectory.shift();
-      }
+    } catch (err) {
+      console.warn("Python marker sunucusuna ulaşılamadı.");
     }
-  });
 
-  document.addEventListener('click', (e) => {
-    this.logEvent('mouse_click', {
-      x: e.clientX,
-      y: e.clientY,
-      target: e.target.tagName,
-      className: e.target.className
+    // ====================================================
+    // VERİTABANI LOGLAMASI
+    // ====================================================
+    window.originalFetch('/api/scenarios/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: this.sessionId,
+        scenarioId: scenario.id,
+        status: 'triggered',
+        details: { name: scenario.name, type: scenario.type, timestamp: now }
+      })
+    }).catch(() => {});
+
+    switch(scenario.type) {
+      case 'slow_image':      this.slowImageLoad(scenario.selector, params.delay || 3000); break;
+      case 'broken_image':    this.brokenImage(scenario.selector); break;
+      case 'skeleton_prolong':this.skeletonProlong(scenario.selector, params.delay || 3000); break;
+      case 'search_irrelevant': this.searchIrrelevant(params.duration || 5000); break;
+      case 'button_delay':    this.buttonDelay(scenario.selector, params.delay || 4000); break;
+      case 'first_click_miss':this.firstClickMiss(scenario.selector); break;
+      case 'feedback_late':   this.inputLag(2000); break;
+      case 'network_jitter':  this.networkJitter(params.delay || 2000); break;
+      case 'overlay_blocking':this.overlayBlocking(params.duration || 4000); break;
+      case 'price_change':    this.priceChangeWarning(params.change_percent || 5); break;
+      case 'coupon_min_spend':this.couponError('coupon_min_spend'); break;
+      case 'coupon_expired':  this.couponError('coupon_expired'); break;
+      case 'facet_reset_once': this.resetFilters(); break;
+      case 'sort_reset': window.dispatchEvent(new Event('sort:reset')); break;
+    }
+  },
+
+  attachCartListeners: function() {
+      window.addEventListener('cart:refresh', () => {
+          console.log('😈 Sepet eklendi! Şoklama yapılıyor...');
+          this.overlayBlocking(3000);
+          this.networkJitter(4000);
+      });
+  },
+
+   // --- MOUSE TRACKING ---
+  initMouseTracking: function() {
+    document.addEventListener('mousemove', (e) => {
+      const now = performance.now();
+      if (now - this.lastMouseTime > this.MOUSE_THROTTLE_MS) {
+        this.mouseTrajectory.push({ x: e.clientX, y: e.clientY, t: now - this.experimentStartTime });
+        this.lastMouseTime = now;
+        if (this.mouseTrajectory.length > 500) this.mouseTrajectory.shift();
+      }
     });
-  });
 
-  document.addEventListener('scroll', () => {
-    if (performance.now() - this.lastMouseTime > 500) {
-      this.logEvent('scroll', {
-        scrollY: window.scrollY
-      });
+    document.addEventListener('click', (e) => {
+      this.logEvent('mouse_click', { x: e.clientX, y: e.clientY, target: e.target.tagName, className: e.target.className });
+    });
 
-      this.lastMouseTime = performance.now();
-    }
-     });
+    document.addEventListener('scroll', () => {
+      if (performance.now() - this.lastMouseTime > 500) {
+        this.logEvent('scroll', { scrollY: window.scrollY });
+        this.lastMouseTime = performance.now();
+      }
+    });
+  },
 
-    }, 
-
-  ////////////////////// yeni eklenen kısım 
-
-    // ----------------------------------------------------
-    // İMPLEMENTASYONLAR
-    // ----------------------------------------------------
-
-    // 1. SLOW IMAGE (Rastgele İndeksler)
-    slowImageLoad: function(selector, delay) {
-      const allImages = Array.from(document.querySelectorAll(selector || 'img'));
-      if(allImages.length === 0) return;
-
-      // Rastgele karıştır
-      const shuffled = allImages.sort(() => 0.5 - Math.random());
-
-      // Rastgele 5 tanesini seç
-      const selectedImages = shuffled.slice(0, 5);
-
-      selectedImages.forEach((img) => {
-          const originalSrc = img.src;
-          img.style.transition = 'all 0.5s ease';
-          img.style.filter = 'blur(20px) grayscale(100%)';
-          img.style.opacity = '0.3';
-          img.style.transform = 'scale(0.95)';
-
-          setTimeout(() => {
-            // Cache bust ile resmi gerçekten yeniden yüklet
-            img.src = originalSrc + (originalSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
-            img.onload = () => {
-                img.style.filter = 'none';
-                img.style.opacity = '1';
-                img.style.transform = 'scale(1)';
-            };
-          }, delay);
-      });
-    },
-
-    // 2. NETWORK JITTER (Görsel İmleç Değişimi + Ağır Lag)
-    networkJitter: function(delay) {
-      if (window.fetch !== window.originalFetch) return;
-
-      const baseDelay = Math.max(delay, 2000);
-      console.log(`🐌 AĞ ÇÖKTÜ: ${baseDelay}ms`);
-
-      // KULLANICIYA HİSSETTİR: Mouse'u "Yükleniyor" yap
-      document.body.style.cursor = 'progress';
-
-      window.fetch = function(...args) {
-        const url = args[0] ? args[0].toString() : '';
-        // Sistem dosyalarını koru
-        if (url.includes('_next') || url.includes('/api/events') || url.includes('/api/scenarios')) {
-            return window.originalFetch.apply(this, args);
-        }
-
-        let dynamicDelay = baseDelay;
-        // Cart ve Products için aşırı yavaş
-        if (url.includes('/api/cart') || url.includes('/api/products')) {
-            dynamicDelay = baseDelay * 3;
-        }
-
-        return new Promise((resolve) => {
-          setTimeout(() => {
-              resolve(window.originalFetch.apply(this, args));
-          }, dynamicDelay);
-        });
-      };
-
-      // 10 saniye sonra imleci ve ağı düzelt
-      setTimeout(() => {
-          window.fetch = window.originalFetch;
-          document.body.style.cursor = 'default';
-      }, 10000);
-    },
-
-    // 3. OVERLAY BLOCKING (Görünürlük Artırıldı)
-    overlayBlocking: function(duration) {
-      const old = document.getElementById('blocking-overlay');
-      if (old) old.remove();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'blocking-overlay';
-      // CSS: Tam siyah, en üst katman
-      overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.85); 
-        z-index: 2147483647; 
-        pointer-events: auto;
-        cursor: not-allowed; 
-        display: flex; align-items: center; justify-content: center; flex-direction: column;
-      `;
-
-      overlay.innerHTML = `
-        <div style="background:white; padding:40px; border-radius:12px; text-align:center;">
-          <div style="width:60px; height:60px; border:6px solid #f3f3f3; border-top:6px solid #ef4444; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div>
-          <h2 style="margin:0 0 10px; color:#1f2937; font-size:20px; font-weight:bold;">Connection Lost</h2>
-          <p style="margin:0; color:#6b7280;">Re-establishing secure connection...</p>
-        </div>
-        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-      `;
-
-      document.body.appendChild(overlay);
-      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, duration);
-    },
-
-    // 4. RESET FILTERS (Daha Şiddetli)
-    resetFilters: function() {
-    document.body.style.cursor = 'wait';
-
-    setTimeout(() => {
-        // 1️⃣ DOM reset
-        const radios = document.querySelectorAll('input[type="radio"]');
-        radios.forEach(radio => {
-            if (radio.value === 'all') radio.checked = true;
-            else radio.checked = false;
-        });
-
-        const searches = document.querySelectorAll('input[type="search"], input[type="text"]');
-        searches.forEach(input => input.value = '');
-
-        // 2️⃣ React & URL ile uyum
-        const url = new URL(window.location.href);
-        url.searchParams.delete('category');
-        url.searchParams.delete('search');
-        window.history.replaceState({}, '', url.toString());
-
-        // 3️⃣ React component tetikleme
-        window.dispatchEvent(new Event('filters:reset'));
-
-        document.body.style.cursor = 'default';
-        this.showToast('⚠️ Filters reset to All.', 'info');
-
-        // Scroll reset
-        window.scrollTo(0, 0);
-    }, 800);
-    },
-
-
-// ----------------------------------------------------
-// 5. INPUT LAG (Yeni Feedback Late)
-// ----------------------------------------------------
-inputLag: function(duration) {
-    const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
-    inputs.forEach(input => {
-        if(input.dataset.lag === 'true') return;
-        input.dataset.lag = 'true';
-        let timer = null;
-
-        const handler = (e) => {
-            if(e.key.length === 1) {
-                e.preventDefault();
-                clearTimeout(timer);
-                timer = setTimeout(() => { input.value += e.key; }, 500);
-            }
-        };
-
-        input.addEventListener('keydown', handler);
-        this.showToast('Keyboard input latency detected.', 'warning');
-
+  // --- İMPLEMENTASYONLAR ---
+  slowImageLoad: function(selector, delay) {
+    const allImages = Array.from(document.querySelectorAll(selector || 'img'));
+    if(allImages.length === 0) return;
+    const selectedImages = allImages.sort(() => 0.5 - Math.random()).slice(0, 5);
+    selectedImages.forEach((img) => {
+        const originalSrc = img.src;
+        img.style.transition = 'all 0.5s ease';
+        img.style.filter = 'blur(20px) grayscale(100%)';
+        img.style.opacity = '0.3';
+        img.style.transform = 'scale(0.95)';
         setTimeout(() => {
-            input.removeEventListener('keydown', handler);
-            input.dataset.lag = 'false';
-        }, duration);
+          img.src = originalSrc + (originalSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
+          img.onload = () => { img.style.filter = 'none'; img.style.opacity = '1'; img.style.transform = 'scale(1)'; };
+        }, delay);
     });
-},
+  },
 
-    buttonDelay: function(selector, delay) {
-  const buttons = document.querySelectorAll(selector || '.add-to-cart');
-  buttons.forEach(btn => {
-    if (btn.dataset.broken === 'true') return;
-    btn.dataset.broken = 'true';
-    const txt = btn.innerText;
+  networkJitter: function(delay) {
+    if (window.fetch !== window.originalFetch) return;
+    const baseDelay = Math.max(delay, 2000);
+    console.log(`🐌 AĞ ÇÖKTÜ: ${baseDelay}ms`);
+    document.body.style.cursor = 'progress';
 
-    const handler = function(e) {
-      e.preventDefault();
-      e.stopImmediatePropagation(); // React handler dahil tüm handler'ları durdur
-      btn.disabled = true;
-      btn.style.cursor = 'not-allowed';
-      btn.style.opacity = '0.7';
-      btn.innerText = 'Stuck...';
-
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.style.cursor = 'pointer';
-        btn.style.opacity = '1';
-        btn.innerText = txt;
-        btn.dataset.broken = 'false';
-        btn.removeEventListener('click', handler, true); // ← EKLENECEK
-      }, delay);
+    window.fetch = function(...args) {
+      const url = args[0] ? args[0].toString() : '';
+      if (url.includes('_next') || url.includes('/api/events') || url.includes('/api/scenarios')) {
+          return window.originalFetch.apply(this, args);
+      }
+      let dynamicDelay = baseDelay;
+      if (url.includes('/api/cart') || url.includes('/api/products')) dynamicDelay = baseDelay * 3;
+      return new Promise((resolve) => { setTimeout(() => { resolve(window.originalFetch.apply(this, args)); }, dynamicDelay); });
     };
 
-    btn.addEventListener('click', handler, true); // capture: true
-  });
-},
+    setTimeout(() => { window.fetch = window.originalFetch; document.body.style.cursor = 'default'; }, 10000);
+  },
 
+  overlayBlocking: function(duration) {
+    const old = document.getElementById('blocking-overlay');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'blocking-overlay';
+    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); z-index: 2147483647; pointer-events: auto; cursor: not-allowed; display: flex; align-items: center; justify-content: center; flex-direction: column;`;
+    overlay.innerHTML = `<div style="background:white; padding:40px; border-radius:12px; text-align:center;"><div style="width:60px; height:60px; border:6px solid #f3f3f3; border-top:6px solid #ef4444; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 20px;"></div><h2 style="margin:0 0 10px; color:#1f2937; font-size:20px; font-weight:bold;">Connection Lost</h2><p style="margin:0; color:#6b7280;">Re-establishing secure connection...</p></div><style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>`;
+    document.body.appendChild(overlay);
+    setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, duration);
+  },
 
-    // Diğerleri...
-    skeletonProlong: function(selector, delay) {
-        const cards = document.querySelectorAll(selector || '.product-card');
-        if (cards.length === 0) return;
-        cards.forEach(card => {
-            const mask = document.createElement('div');
-            mask.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e5e7eb; opacity: 0.9; z-index: 10; display:flex; align-items:center; justify-content:center; color:#666; font-size:12px;`;
-            mask.innerText = "Loading...";
-            const originalPos = card.style.position;
-            card.style.position = 'relative';
-            card.appendChild(mask);
-            setTimeout(() => { mask.remove(); card.style.position = originalPos; }, delay);
-        });
-    },
+  resetFilters: function() {
+    document.body.style.cursor = 'wait';
+    setTimeout(() => {
+      document.querySelectorAll('input[type="radio"]').forEach(radio => radio.checked = (radio.value === 'all'));
+      document.querySelectorAll('input[type="search"], input[type="text"]').forEach(input => input.value = '');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('category');
+      url.searchParams.delete('search');
+      window.history.replaceState({}, '', url.toString());
+      window.dispatchEvent(new Event('filters:reset'));
+      document.body.style.cursor = 'default';
+      this.showToast('⚠️ Filters reset to All.', 'info');
+      window.scrollTo(0, 0);
+    }, 800);
+  },
 
-    searchIrrelevant: function(duration) {
-        const products = document.querySelectorAll('.product-card');
-        if (products.length < 2) return;
-        const parent = products[0].parentNode;
-        const shuffled = Array.from(products).sort(() => Math.random() - 0.5);
-        shuffled.forEach(node => parent.appendChild(node));
-        this.showToast('Search index corrupted.', 'warning');
-    },
+  inputLag: function(duration) {
+      const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
+      inputs.forEach(input => {
+          if(input.dataset.lag === 'true') return;
+          input.dataset.lag = 'true';
+          let timer = null;
+          const handler = (e) => {
+              if(e.key.length === 1) {
+                  e.preventDefault();
+                  clearTimeout(timer);
+                  timer = setTimeout(() => { input.value += e.key; }, 500);
+              }
+          };
+          input.addEventListener('keydown', handler);
+          this.showToast('Keyboard input latency detected.', 'warning');
+          setTimeout(() => { input.removeEventListener('keydown', handler); input.dataset.lag = 'false'; }, duration);
+      });
+  },
 
-    brokenImage: function(selector) {
-      const images = document.querySelectorAll(selector || 'img');
-      if (images.length > 0) {
-        const randomImg = images[Math.floor(Math.random() * images.length)];
-        if(randomImg) {
-            randomImg.removeAttribute('src');
-            randomImg.removeAttribute('srcset');
-            randomImg.style.backgroundColor = '#fee2e2'; // Kırmızımsı arka plan
-            randomImg.style.border = '2px dashed #ef4444';
-            randomImg.style.minHeight = '150px';
-            randomImg.setAttribute('alt', 'BROKEN_ASSET_404');
-        }
+  buttonDelay: function(selector, delay) {
+    const buttons = document.querySelectorAll(selector || '.add-to-cart');
+    buttons.forEach(btn => {
+      if (btn.dataset.broken === 'true') return;
+      btn.dataset.broken = 'true';
+      const txt = btn.innerText;
+      const handler = function(e) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        btn.disabled = true;
+        btn.style.cursor = 'not-allowed';
+        btn.style.opacity = '0.7';
+        btn.innerText = 'Stuck...';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.style.cursor = 'pointer';
+          btn.style.opacity = '1';
+          btn.innerText = txt;
+          btn.dataset.broken = 'false';
+          btn.removeEventListener('click', handler, true);
+        }, delay);
+      };
+      btn.addEventListener('click', handler, true);
+    });
+  },
+
+  skeletonProlong: function(selector, delay) {
+      const cards = document.querySelectorAll(selector || '.product-card');
+      if (cards.length === 0) return;
+      cards.forEach(card => {
+          const mask = document.createElement('div');
+          mask.style.cssText = `position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e5e7eb; opacity: 0.9; z-index: 10; display:flex; align-items:center; justify-content:center; color:#666; font-size:12px;`;
+          mask.innerText = "Loading...";
+          const originalPos = card.style.position;
+          card.style.position = 'relative';
+          card.appendChild(mask);
+          setTimeout(() => { mask.remove(); card.style.position = originalPos; }, delay);
+      });
+  },
+
+  searchIrrelevant: function(duration) {
+      const products = document.querySelectorAll('.product-card');
+      if (products.length < 2) return;
+      const parent = products[0].parentNode;
+      const shuffled = Array.from(products).sort(() => Math.random() - 0.5);
+      shuffled.forEach(node => parent.appendChild(node));
+      this.showToast('Search index corrupted.', 'warning');
+  },
+
+  brokenImage: function(selector) {
+    const images = document.querySelectorAll(selector || 'img');
+    if (images.length > 0) {
+      const randomImg = images[Math.floor(Math.random() * images.length)];
+      if(randomImg) {
+          randomImg.removeAttribute('src');
+          randomImg.removeAttribute('srcset');
+          randomImg.style.backgroundColor = '#fee2e2';
+          randomImg.style.border = '2px dashed #ef4444';
+          randomImg.style.minHeight = '150px';
+          randomImg.setAttribute('alt', 'BROKEN_ASSET_404');
       }
-    },
+    }
+  },
 
-    firstClickMiss: function(selector) {
+  firstClickMiss: function(selector) {
     const buttons = document.querySelectorAll(selector || 'button');
     buttons.forEach(btn => {
         if (btn.dataset.miss === 'true') return;
         btn.dataset.miss = 'true';
-
         const handler = (e) => {
             e.preventDefault();
-            e.stopImmediatePropagation(); // React dahil tüm click handler'ları durdur
-            btn.style.transform = 'translate(15px, 15px)'; 
+            e.stopImmediatePropagation();
+            btn.style.transform = 'translate(15px, 15px)';
             setTimeout(() => btn.style.transform = 'none', 200);
         };
-
-        btn.addEventListener('click', handler, true); // capture: true
-
-        // İstersen 500ms sonra listener’ı temizle
-        setTimeout(() => {
-            btn.removeEventListener('click', handler, true);
-            btn.dataset.miss = 'false';
-        }, 500);
+        btn.addEventListener('click', handler, true);
+        setTimeout(() => { btn.removeEventListener('click', handler, true); btn.dataset.miss = 'false'; }, 500);
     });
-},
+  },
 
+  priceChangeWarning: function(changePercent) {
+    if (!window.location.pathname.includes('cart')) return;
+    const banner = document.createElement('div');
+    banner.className = 'bg-red-50 text-red-700 p-4 mb-4 rounded border border-red-200 font-bold';
+    banner.innerText = `⚠️ UYARI: Sepet toplamı döviz dalgalanması nedeniyle güncellendi.`;
+    const main = document.querySelector('main');
+    if(main) main.insertBefore(banner, main.firstChild);
+  },
 
-    priceChangeWarning: function(changePercent) {
-      if (!window.location.pathname.includes('cart')) return;
-      const banner = document.createElement('div');
-      banner.className = 'bg-red-50 text-red-700 p-4 mb-4 rounded border border-red-200 font-bold';
-      banner.innerText = `⚠️ UYARI: Sepet toplamı döviz dalgalanması nedeniyle güncellendi.`;
-      const main = document.querySelector('main');
-      if(main) main.insertBefore(banner, main.firstChild);
-    },
+  couponError: function(type) { this.showToast(type === 'coupon_expired' ? 'Code Expired' : '⚠️ Kupon Süresi Dolmuş', 'error'); },
 
-    couponError: function(type) { this.showToast(type === 'coupon_expired' ? 'Code Expired' : '⚠️ Kupon Süresi Dolmuş', 'error'); },
+  showToast: function(message, type) {
+      const toast = document.createElement('div');
+      toast.style.cssText = `position:fixed; top:20px; right:20px; padding:15px 25px; background:${type==='error'?'#dc2626':'#d97706'}; color:white; border-radius:8px; z-index:99999; font-family:sans-serif; font-weight:bold; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);`;
+      toast.innerText = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+  },
 
-    showToast: function(message, type) {
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed; top:20px; right:20px; padding:15px 25px; background:${type==='error'?'#dc2626':'#d97706'}; color:white; border-radius:8px; z-index:99999; font-family:sans-serif; font-weight:bold; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);`;
-        toast.innerText = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 4000);
-    },
+  trackPageView: function() { this.logEvent('page_view', { url: window.location.href }); },
 
-    trackPageView: function() { this.logEvent('page_view', { url: window.location.href }); },
-logEvent: function(eventType, eventData) {
-      this.eventQueue.push({
-        sessionId: this.sessionId,
-        experimentGroup: this.experimentGroup, // YENİ: O anki grubu ekle (Control veya Variant)
-        eventType: eventType,
-        eventData: eventData,
-        pageUrl: window.location.href,
-        timestamp: Date.now()
+  logEvent: function(eventType, eventData) {
+    this.eventQueue.push({
+      sessionId: this.sessionId,
+      experimentGroup: this.experimentGroup,
+      eventType: eventType,
+      eventData: eventData,
+      pageUrl: window.location.href,
+      timestamp: Date.now()
+    });
+  },
+
+  flushEvents: async function() {
+    if (this.mouseTrajectory.length > 0) {
+      this.logEvent('mouse_trajectory', { path: [...this.mouseTrajectory] });
+      this.mouseTrajectory = [];
+    }
+    if (this.eventQueue.length === 0) return;
+    const events = [...this.eventQueue];
+    this.eventQueue = [];
+    try {
+      await window.originalFetch('/api/events/batch', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(events)
       });
-    }, flushEvents: async function() {
+    } catch (e) {}
+  },
 
-  //// MOUSE VERİSİNİ EVENT'E EKLE yeni eklenen kısım
-  if (this.mouseTrajectory.length > 0) {
-    this.logEvent('mouse_trajectory', {
-      path: [...this.mouseTrajectory]
-    });
-
-    this.mouseTrajectory = [];
-  }
-
-  if (this.eventQueue.length === 0) return;
-
-  const events = [...this.eventQueue]; 
-  this.eventQueue = [];
-
-  try {
-    await window.originalFetch('/api/events/batch', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(events)
-    });
-  } catch (e) {}
-},
-
-    threeDSSoftFail: function() {}, paymentTimeout: function() {}
-  };
+  threeDSSoftFail: function() {}, paymentTimeout: function() {}
+};

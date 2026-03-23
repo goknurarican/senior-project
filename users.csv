@@ -1,0 +1,7 @@
+id,email,password,role,name,created_at
+8,admin@test.com,admin123,admin,Admin User,2025-12-22 10:18:44
+9,user@test.com,user123,user,Test User,2025-12-22 10:18:44
+10,fselcuk5@gmail.com,$2b$10$yeVMFYYOniZGQC3uZe.O7e/wo0sW6t4A/3YxOyDsd9CI43E0PbXi.,user,Fatih Selcuk,2025-12-22 12:43:29
+11,alkans@test.com,$2b$10$njzoWg6JDZgRXhMHXvmCYesYfTeyfgyXg.F/62AxaXmnl80NN8Rbe,user,elis sude alkan,2025-12-26 08:30:51
+12,semih.yilmaz2852@gmail.com,$2b$10$GWTo/GQmT3B7XsGH3KaNvuGR169zTWrgCRUTQb.7UWnuggFGggmP6,user,Semih Yılmaz ,2025-12-26 09:59:39
+13,semshow2852@gmail.com,$2b$10$cL/wpaDtp03y3jZ8Yg17N../LejsVRuyU5FqvWja0eWzgLw48A4Pe,user,Semih Yılmaz,2025-12-26 10:00:47
