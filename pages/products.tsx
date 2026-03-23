@@ -16,7 +16,7 @@ export default function Products() {
   const { category, search } = router.query;
 
   /* --------------------------------------------------
-     🔁 SORT RESET LISTENER (INJECTION -> UI)
+      SORT RESET LISTENER (INJECTION -> UI)
   -------------------------------------------------- */
   useEffect(() => {
     const handleSortReset = () => {
@@ -66,11 +66,11 @@ export default function Products() {
   };
 
   /* --------------------------------------------------
-     🔃 SORT LOGIC
+      SORT LOGIC
   -------------------------------------------------- */
   const getSortedProducts = () => {
   if (sortBy === "featured") {
-    return [...originalProducts]; // 🔥 GERÇEK RESET
+    return [...originalProducts]; //  GERÇEK RESET mantğı burada
   }
 
   const sorted = [...products];
@@ -166,7 +166,7 @@ export default function Products() {
   };
 
   /* --------------------------------------------------
-     🖼️ UI
+     🖼️ UI geliştirmeli 
   -------------------------------------------------- */
   return (
     <Layout>
@@ -222,7 +222,7 @@ export default function Products() {
                 : "All Products"}
             </h1>
 
-            {/* 🔥 KEY EKLENDİ → SORT RESET %100 */}
+            {/*  KEY EKLENDİ → SORT RESET %100 çalışıyor */}
             <select
               key={sortBy}
               className="px-4 py-2 border rounded"
