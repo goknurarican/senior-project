@@ -36,6 +36,14 @@
     eventQueue: [],
     pageLoadTime: Date.now(),
     lastScenarioTime: 0,
+    ////////////////////yeni eklenen
+    // === MOUSE TRACKING ===
+    mouseTrajectory: [],
+    lastMouseTime: 0,
+    MOUSE_THROTTLE_MS: 100,
+    experimentStartTime: performance.now(),
+    // ======================
+    /////////////////////
 
     // AYARLAR: Çok daha normal değerler, gerçek dünyaya uygun
     COOLDOWN_MS: 5000, 
@@ -93,6 +101,9 @@
           }
       });
       this.trackPageView();
+      // çalıştırmak için yeni eklendi burası mouse tracking
+      this.initMouseTracking();
+      /////// çalıştırmak için
       setInterval(() => this.flushEvents(), 3000);
     },
 
@@ -207,6 +218,51 @@
             this.networkJitter(4000);
         });
     },
+       
+    /////////////////////// yeni eklenen kısım
+     // --- MOUSE TRACKING ---
+    initMouseTracking: function() {
+
+  document.addEventListener('mousemove', (e) => {
+    const now = performance.now();
+
+    if (now - this.lastMouseTime > this.MOUSE_THROTTLE_MS) {
+      this.mouseTrajectory.push({
+        x: e.clientX,
+        y: e.clientY,
+        t: now - this.experimentStartTime
+      });
+
+      this.lastMouseTime = now;
+
+      if (this.mouseTrajectory.length > 500) {
+        this.mouseTrajectory.shift();
+      }
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    this.logEvent('mouse_click', {
+      x: e.clientX,
+      y: e.clientY,
+      target: e.target.tagName,
+      className: e.target.className
+    });
+  });
+
+  document.addEventListener('scroll', () => {
+    if (performance.now() - this.lastMouseTime > 500) {
+      this.logEvent('scroll', {
+        scrollY: window.scrollY
+      });
+
+      this.lastMouseTime = performance.now();
+    }
+     });
+
+    }, 
+
+  ////////////////////// yeni eklenen kısım 
 
     // ----------------------------------------------------
     // İMPLEMENTASYONLAR
@@ -493,10 +549,29 @@ logEvent: function(eventType, eventData) {
         timestamp: Date.now()
       });
     }, flushEvents: async function() {
-      if (this.eventQueue.length === 0) return;
-      const events = [...this.eventQueue]; this.eventQueue = [];
-      try { await window.originalFetch('/api/events/batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(events) }); } catch (e) {}
-    },
+
+  //// MOUSE VERİSİNİ EVENT'E EKLE yeni eklenen kısım
+  if (this.mouseTrajectory.length > 0) {
+    this.logEvent('mouse_trajectory', {
+      path: [...this.mouseTrajectory]
+    });
+
+    this.mouseTrajectory = [];
+  }
+
+  if (this.eventQueue.length === 0) return;
+
+  const events = [...this.eventQueue]; 
+  this.eventQueue = [];
+
+  try {
+    await window.originalFetch('/api/events/batch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(events)
+    });
+  } catch (e) {}
+},
 
     threeDSSoftFail: function() {}, paymentTimeout: function() {}
   };
