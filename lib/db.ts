@@ -38,6 +38,8 @@ async function initDb(db: any) {
       id TEXT PRIMARY KEY,
       user_id INTEGER,  -- YENİ: Login olan user buraya yazılacak
       experiment_group TEXT DEFAULT 'control',
+      phase TEXT DEFAULT 'control',
+      assigned_variant TEXT,                  
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       user_agent TEXT,
       ip TEXT
@@ -49,6 +51,7 @@ async function initDb(db: any) {
       session_id TEXT,
       user_id INTEGER, -- YENİ: Opsiyonel, analiz kolaylığı için
       experiment_group TEXT, -- YENİ: Event anındaki grup (Control mü C mi?)
+      phase TEXT,
       event_type TEXT,
       event_data TEXT,
       page_url TEXT,

@@ -1,0 +1,17 @@
+{
+  "user_id": 2,
+  "name": "Test User",
+  "email": "user@test.com",
+  "session_id": "unknown",
+  "group": "unknown",
+  "packaged_at": "2026-03-23T23:00:22.512107",
+  "counts": {
+    "all_events": 0,
+    "mouse_trajectories": 0,
+    "mouse_clicks": 0,
+    "scenarios": 0,
+    "page_views": 0
+  },
+  "eeg_found": 0,
+  "eye_found": false
+}

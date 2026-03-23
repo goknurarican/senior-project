@@ -1,0 +1,17 @@
+{
+  "user_id": 3,
+  "name": "goknur arıcan",
+  "email": "goknurarican@gmail.com",
+  "session_id": "be248a35-60c3-42a7-bfe8-5685b3a32f85",
+  "group": "control",
+  "packaged_at": "2026-03-23T23:00:22.616240",
+  "counts": {
+    "all_events": 37,
+    "mouse_trajectories": 15,
+    "mouse_clicks": 13,
+    "scenarios": 0,
+    "page_views": 2
+  },
+  "eeg_found": 0,
+  "eye_found": false
+}

@@ -46,13 +46,14 @@ window.ExperimentSDK = {
 
   init: async function() {
     try {
-      const res = await window.originalFetch('/api/session/info');
+      const res = await window.originalFetch('/api/session/info?t=' + Date.now());
       const data = await res.json();
       this.sessionId = data.sessionId || null;
       this.experimentGroup = data.experimentGroup || 'control';
+      this.phase = data.phase || 'control';           // ← BURAYA TAŞI
     } catch (e) { return; }
 
-    if (this.experimentGroup !== 'control') {
+    if (this.phase !== 'control' && this.experimentGroup !== 'control') {
       await this.loadScenarios();
       this.startScenarioWatcher();
       this.attachCartListeners(); // Sepet dinleyicisi
@@ -95,8 +96,7 @@ window.ExperimentSDK = {
 
   loadScenarios: async function() {
     try {
-      const res = await window.originalFetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}`);
-      const allScenarios = await res.json();
+const res = await window.originalFetch(`/api/scenarios/active?page=${encodeURIComponent(window.location.pathname)}&group=${this.experimentGroup}&t=${Date.now()}`);      const allScenarios = await res.json();
       this.scenarios = allScenarios.filter(s => s.enabled === 1);
       console.log(`📦 Yüklendi (${window.location.pathname}):`, this.scenarios.map(s => s.name));
     } catch (e) {}

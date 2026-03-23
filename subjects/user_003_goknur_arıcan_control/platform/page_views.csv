@@ -1,0 +1,3 @@
+id,event_type,event_data,page_url,timestamp,relative_t_ms,created_at
+1,page_view,"{""url"":""http://localhost:3000/""}",http://localhost:3000/,1774295937215,,2026-03-23 19:59:00
+17,page_view,"{""url"":""http://localhost:3000/""}",http://localhost:3000/,1774295966873,,2026-03-23 19:59:29

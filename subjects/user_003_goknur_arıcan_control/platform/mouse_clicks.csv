@@ -1,0 +1,14 @@
+id,event_type,event_data,page_url,timestamp,relative_t_ms,created_at
+3,mouse_click,"{""x"":1616,""y"":42,""target"":""A"",""className"":""text-sm text-blue-600 hover:text-blue-800""}",http://localhost:3000/,1774295940440,,2026-03-23 19:59:03
+6,mouse_click,"{""x"":1060,""y"":814,""target"":""A"",""className"":""font-medium text-blue-600 hover:text-blue-500""}",http://localhost:3000/login,1774295946487,,2026-03-23 19:59:09
+9,mouse_click,"{""x"":856,""y"":728,""target"":""INPUT"",""className"":""mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500""}",http://localhost:3000/signup,1774295953450,,2026-03-23 19:59:15
+11,mouse_click,"{""x"":858,""y"":806,""target"":""INPUT"",""className"":""mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500""}",http://localhost:3000/signup,1774295955418,,2026-03-23 19:59:18
+13,mouse_click,"{""x"":812,""y"":912,""target"":""INPUT"",""className"":""mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500""}",http://localhost:3000/signup,1774295959690,,2026-03-23 19:59:21
+15,mouse_click,"{""x"":953,""y"":992,""target"":""BUTTON"",""className"":""w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed""}",http://localhost:3000/signup,1774295963469,,2026-03-23 19:59:24
+18,mouse_click,"{""x"":498,""y"":54,""target"":""DIV"",""className"":""flex justify-between items-center h-16""}",http://localhost:3000/,1774295969453,,2026-03-23 19:59:29
+20,mouse_click,"{""x"":498,""y"":38,""target"":""A"",""className"":""text-gray-700 hover:text-blue-600""}",http://localhost:3000/,1774295969911,,2026-03-23 19:59:32
+30,mouse_click,"{""x"":1102,""y"":1086,""target"":""IMG"",""className"":""w-full h-48 object-cover rounded-t-lg product-image""}",http://localhost:3000/products,1774295981091,,2026-03-23 19:59:43
+32,mouse_click,"{""x"":1102,""y"":1086,""target"":""DIV"",""className"":""mt-16""}",http://localhost:3000/product/8,1774295981951,,2026-03-23 19:59:43
+35,mouse_click,"{""x"":1264,""y"":562,""target"":""BUTTON"",""className"":""w-10 h-10 rounded border hover:bg-gray-100""}",http://localhost:3000/product/8,1774295984023,,2026-03-23 19:59:47
+36,mouse_click,"{""x"":1256,""y"":622,""target"":""BUTTON"",""className"":""flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 font-semibold add-to-cart""}",http://localhost:3000/product/8,1774295984788,,2026-03-23 19:59:47
+37,mouse_click,"{""x"":526,""y"":42,""target"":""A"",""className"":""text-gray-700 hover:text-blue-600""}",http://localhost:3000/products,1774295987642,,2026-03-23 19:59:47
