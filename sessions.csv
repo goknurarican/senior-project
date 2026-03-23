@@ -1,0 +1,14 @@
+id,user_id,experiment_group,created_at,user_agent,ip
+8888c7b1-8f92-43f6-830e-007748322043,,control,2025-12-22 10:20:06,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+d63f258f-d166-466a-9c28-4314e59d1f24,,variant_a,2025-12-22 12:43:29,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+e2a56304-5104-4514-a081-c4a6e69d28a9,,control,2025-12-26 07:35:56,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",::1
+ff43e5bb-0fe6-4374-afab-abd28f59ee74,,control,2025-12-26 07:35:56,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",::1
+47460be4-ab0c-453a-8eaf-8588fde55007,,variant_b,2025-12-26 08:30:51,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",::1
+b92afc00-8444-443c-8787-f439ecc1f7e0,,control,2025-12-26 08:38:30,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",::1
+86ccba60-cf7a-4415-bb8e-03f2ef788fb4,,control,2025-12-26 08:38:30,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",::1
+5e29153d-8fbb-4de9-acdb-b6d07c6056d0,,control,2025-12-26 08:53:42,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+d6429618-6f0c-413b-bb2f-0e1154453307,,control,2025-12-26 08:53:43,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+a56becab-504b-4c8c-b4ca-cb713dde2d09,,control,2025-12-26 09:59:39,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+db09edcf-2b6e-47fe-86d5-7b2c660f4159,,control,2025-12-26 09:59:49,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+ccb208d3-1978-4383-9bf0-58f127e93aa0,,control,2025-12-26 09:59:49,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1
+3e735bad-5746-4afa-a7ea-81f929178658,,variant_c,2025-12-26 10:00:47,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",::1

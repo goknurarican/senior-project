@@ -13,8 +13,8 @@
     pageLoadTime: Date.now(),
     lastScenarioTime: 0,
 
-    // AYARLAR: Çok daha agresif
-    COOLDOWN_MS: 800, // Bekleme süresini 0.8 saniyeye düşürdüm (Daha sık saldırı)
+    // AYARLAR: Çok daha agresif kaldırıldı
+    COOLDOWN_MS: 800, // Bekleme süresini 5 saniyeye düşürdüm (Daha sık saldırı kaldırıldı)
     MAX_SCENARIOS_PER_SESSION: 9999,
 
     init: async function() {

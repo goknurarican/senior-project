@@ -12,6 +12,7 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cookies-next": "^4.1.0",
+    "fast-csv": "^5.0.5",
     "next": "^14.2.33",
     "react": "18.2.0",
     "react-dom": "18.2.0",
