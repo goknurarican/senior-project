@@ -8,27 +8,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = await getDb();
 
   let sessionId = getCookie('experiment_session_id', { req, res });
-  let group = 'control'; // Varsayılan: Her zaman Control
+  let group = 'control';
+  let phase = 'control';
+  let assignedVariant = 'control';
 
   // 1. Session Var mı Kontrol Et
   if (sessionId) {
-    const session = await db.get('SELECT experiment_group FROM sessions WHERE id = ?', sessionId);
+    const session = await db.get(
+      'SELECT experiment_group, phase, assigned_variant FROM sessions WHERE id = ?',
+      sessionId
+    );
     if (session) {
-      group = session.experiment_group;
+      group = session.experiment_group || 'control';
+      phase = session.phase || 'control';
+      assignedVariant = session.assigned_variant || 'control';
     } else {
-      sessionId = null; // Cookie var ama DB'de yoksa silinmiş demektir
+      sessionId = null;
     }
   }
 
-  // 2. Yoksa Yeni Oluştur (AMA SADECE CONTROL)
+  // 2. Yoksa Yeni Oluştur (SADECE CONTROL)
   if (!sessionId) {
     sessionId = uuidv4();
-    // Burada RANDOM YOK! Sadece 'control'
     group = 'control';
+    phase = 'control';
 
     await db.run(
-      'INSERT INTO sessions (id, experiment_group, user_agent, ip) VALUES (?, ?, ?, ?)',
-      [sessionId, group, req.headers['user-agent'] || '', req.headers['x-forwarded-for'] || '']
+      'INSERT INTO sessions (id, experiment_group, phase, assigned_variant, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?)',
+      [sessionId, group, phase, 'control', req.headers['user-agent'] || '', req.headers['x-forwarded-for'] || '']
     );
 
     setCookie('experiment_session_id', sessionId, {
@@ -36,5 +43,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  res.status(200).json({ sessionId, experimentGroup: group });
+  res.status(200).json({
+    sessionId,
+    experimentGroup: group,
+    phase,
+    assignedVariant,
+  });
 }

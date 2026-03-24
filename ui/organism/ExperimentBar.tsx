@@ -1,73 +1,124 @@
 // ui/organism/ExperimentBar.tsx
-import React, { useState, useEffect } from 'react';
+// Bu dosyayı mevcut ExperimentBar ile değiştir.
+// Layout.tsx'de zaten import ediliyor: import ExperimentBar from '../ui/organism/ExperimentBar';
+
+import { useState, useEffect } from "react";
 
 export default function ExperimentBar() {
-  const [phase, setPhase] = useState<string>("control");
-  const [mounted, setMounted] = useState(false);
+  const [phase, setPhase] = useState<string | null>(null);
+  const [group, setGroup] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    // ?t= parametresi ile tarayıcının önbelleğini (cache) deliyoruz
-    fetch(`/api/session/info?t=${Date.now()}`)
+    fetch("/api/session/info")
       .then((r) => r.json())
       .then((data) => {
-        if (data.phase) setPhase(data.phase);
+        setPhase(data.phase || "control");
+        setGroup(data.assignedVariant || data.experimentGroup || "unknown");
       })
-      .catch((err) => console.error("Phase fetch error:", err));
+      .catch(() => setPhase("control"));
   }, []);
 
-  const startPhase2 = async () => {
-    const res = await fetch("/api/experiment/phase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start_variant" }),
-    });
-    const data = await res.json();
+  const changePhase = async (action: string) => {
+    setLoading(true);
 
-    if (data.status === "success") {
-      alert(`Phase 1 Bitti! Sistem şimdi 2. Aşamaya (${data.phase}) geçiyor.`);
-      // Hafızayı tamamen temizlemek ve yeni SDK'yı yüklemek için KESİN YENİLEME:
-      window.location.href = "/";
+    try {
+      const res = await fetch("/api/experiment/phase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+
+      if (data.status === "success") {
+        if (action === "start_variant") {
+          // Phase 2 başlıyor — sayfayı yenile ki SDK yeni phase'i alsın
+          // ve senaryoları yüklesin
+          alert(`Phase 2 başladı: ${data.phase}. Sayfa yenilenecek.`);
+          window.location.reload();
+        } else if (action === "end_experiment") {
+          // Deney bitti — login sayfasına yönlendir (cookie'ler silindi)
+          alert("Deney tamamlandı.");
+          window.location.href = "/signup";
+        }
+      } else {
+        alert("Hata: " + (data.error || "Bilinmeyen hata"));
+        setLoading(false);
+      }
+    } catch (e) {
+      alert("API hatası: " + e);
+      setLoading(false);
     }
   };
 
-  const endExperiment = async () => {
-    const res = await fetch("/api/experiment/phase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "end_experiment" }),
-    });
+  // Yükleniyor veya completed ise gösterme
+  if (!phase || phase === "completed") return null;
 
-    if (res.ok) {
-      alert("Deney bitti! Katılımınız için teşekkür ederiz.");
-      window.location.href = "/signup";
-    }
-  };
-
-  if (!mounted || phase === "completed") return null;
+  // Admin sayfalarında gösterme
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center z-[99999] shadow-lg border-t-4 border-blue-500">
-      <div className="font-bold text-lg">
-        Deney Aşaması: <span className="text-blue-400">{phase === "control" ? "Phase 1" : "Phase 2"}</span>
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: "#1e293b",
+        padding: "10px 20px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        zIndex: 9999,
+        borderTop: "2px solid #3b82f6",
+      }}
+    >
+      <div style={{ color: "#94a3b8", fontSize: 13 }}>
+        <span style={{ marginRight: 16 }}>
+          Phase: <strong style={{ color: phase === "control" ? "#22c55e" : "#ef4444" }}>{phase}</strong>
+        </span>
+        <span>
+          Group: <strong style={{ color: "#60a5fa" }}>{group}</strong>
+        </span>
       </div>
-      <div>
-        {phase === "control" ? (
-          <button
-            onClick={startPhase2}
-            className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition-colors shadow-md"
-          >
-            End Phase 1 & Start Phase 2
-          </button>
-        ) : (
-          <button
-            onClick={endExperiment}
-            className="bg-green-600 hover:bg-green-500 px-6 py-2 rounded font-bold transition-colors shadow-md"
-          >
-            End Experiment
-          </button>
-        )}
-      </div>
+
+      {phase === "control" && (
+        <button
+          onClick={() => changePhase("start_variant")}
+          disabled={loading}
+          style={{
+            padding: "8px 20px",
+            fontSize: 14,
+            fontWeight: 600,
+            background: loading ? "#6b7280" : "#3b82f6",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            cursor: loading ? "wait" : "pointer",
+          }}
+        >
+          {loading ? "Switching..." : "End Phase 1 & Start Phase 2"}
+        </button>
+      )}
+
+      {phase !== "control" && phase !== "completed" && (
+        <button
+          onClick={() => changePhase("end_experiment")}
+          disabled={loading}
+          style={{
+            padding: "8px 20px",
+            fontSize: 14,
+            fontWeight: 600,
+            background: loading ? "#6b7280" : "#dc2626",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            cursor: loading ? "wait" : "pointer",
+          }}
+        >
+          {loading ? "Ending..." : "End Experiment"}
+        </button>
+      )}
     </div>
   );
 }
