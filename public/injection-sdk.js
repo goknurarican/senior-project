@@ -33,14 +33,14 @@ window.ExperimentSDK = {
   pageLoadTime: Date.now(),
   lastScenarioTime: 0,
 
-  // === MOUSE TRACKING ===
+  // === MOUSE TRACKING yeni eklendi bu ===
   mouseTrajectory: [],
   lastMouseTime: 0,
   MOUSE_THROTTLE_MS: 100,
   experimentStartTime: performance.now(),
   // ======================
 
-  // AYARLAR (ML Verisi İçin İdeal Cooldown: 5 Saniye)
+  // AYARLAR (ML Verisi İçin İdeal Cooldown: 5 Saniye) tüm senaryolar için ortak 5 saniyelik cooldown uygulanacak, böylece tetiklemeler arasında yeterli zaman aralığı kalır ve ML modelinin öğrenmesi kolaylaşır.
   COOLDOWN_MS: 5000,
   MAX_SCENARIOS_PER_SESSION: 9999,
 

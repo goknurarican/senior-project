@@ -1,4 +1,5 @@
 // pages/product/[id].tsx
+
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
@@ -13,7 +14,9 @@ import RelatedProducts from "../../ui/organism/RelatedProducts";
 export default function ProductDetail() {
   const router = useRouter();
   const { id } = router.query;
+
   const [product, setProduct] = useState<products>(null);
+  const [products, setProducts] = useState<products[]>([]); // 🔥 YENİ: tüm ürünleri tutacağız
   const [loading, setLoading] = useState<boolean>(true);
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedImage, setSelectedImage] = useState<number>(0);
@@ -21,14 +24,23 @@ export default function ProductDetail() {
   useEffect(() => {
     if (id) {
       fetchProduct();
+      fetchProducts(); // 🔥 YENİ: tüm ürünleri çekiyoruz
     }
   }, [id]);
 
+  // 🔹 TEK ÜRÜN GETİR
   const fetchProduct = async () => {
     const res = await fetch(`/api/products/${id}`);
     const data = await res.json();
     setProduct(data);
     setLoading(false);
+  };
+
+  // 🔥 YENİ: TÜM ÜRÜNLERİ GETİR (related için lazım)
+  const fetchProducts = async () => {
+    const res = await fetch("/api/products");
+    const data = await res.json();
+    setProducts(data);
   };
 
   const addToCart = async () => {
@@ -38,7 +50,6 @@ export default function ProductDetail() {
       body: JSON.stringify({ productId: product.id, quantity }),
     });
 
-    // Show success message
     alert(`Added ${quantity} x ${product.title} to cart!`);
     router.push("/cart");
   };
@@ -59,7 +70,7 @@ export default function ProductDetail() {
     );
   }
 
-  // Generate multiple images for gallery
+  // 🔹 Galeri için sahte image çoğaltma
   const images = [
     product.image,
     product.image.replace("random=", "random=a"),
@@ -70,6 +81,7 @@ export default function ProductDetail() {
   return (
     <Layout>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
         {/* Product Images */}
         <ProductImage
           images={images}
@@ -77,6 +89,7 @@ export default function ProductDetail() {
           setSelectedImage={setSelectedImage}
           product={product}
         />
+
         {/* Product Info */}
         <ProductInfo
           product={product}
@@ -85,8 +98,13 @@ export default function ProductDetail() {
           addToCart={addToCart}
         />
       </div>
-      {/* Related Products */}
-      <RelatedProducts />
+
+      {/* 🔥 YENİ: RELATED PRODUCTS (EN ÖNEMLİ KISIM) */}
+      <RelatedProducts 
+        currentProduct={product} 
+        products={products}
+      />
+
     </Layout>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react"; // EKLENDİ: useState
 import { product_info } from "../../types/types";
 
 function ProductInfo({
@@ -8,6 +8,18 @@ function ProductInfo({
   setQuantity,
   addToCart,
 }: product_info) {
+
+  // EKLENDİ: favorite state
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  // EKLENDİ: favorite toggle fonksiyonu
+  const toggleFavorite = () => {
+    setIsFavorite(!isFavorite);
+
+    // EKLENDİ: event dispatch (opsiyonel)
+    window.dispatchEvent(new Event("favorite:toggle"));
+  };
+
   return (
     <div>
       <nav className="text-sm mb-4">
@@ -87,10 +99,17 @@ function ProductInfo({
         >
           Add to Cart
         </button>
-        <button className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50">
+
+        {/* EKLENDİ: FAVORITE BUTTON (DÜZELTİLDİ) */}
+        <button
+          onClick={toggleFavorite}
+          className={`px-6 py-3 border rounded-lg hover:bg-gray-50 transition ${
+            isFavorite ? "text-red-500 border-red-500" : "text-gray-400"
+          }`}
+        >
           <svg
             className="w-6 h-6"
-            fill="none"
+            fill={isFavorite ? "currentColor" : "none"} // EKLENDİ: dolu/boş kalp
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
@@ -107,34 +126,14 @@ function ProductInfo({
       <div className="mt-8 border-t pt-8">
         <div className="space-y-2 text-sm text-gray-600">
           <div className="flex items-center">
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
             </svg>
             In Stock ({product.stock || 100} available)
           </div>
           <div className="flex items-center">
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             Ships in 1-3 business days
           </div>

@@ -124,7 +124,7 @@ export default function Checkout() {
     }
     setErrors((prev: any) => ({ ...prev, [name]: error }));
   };
-
+  // Form validasyonları
   const validateStep1 = () => {
     const step1Fields = ["name", "email", "phone", "address", "city"];
     let valid = true;
@@ -138,7 +138,7 @@ export default function Checkout() {
     setErrors(newErrors);
     return valid;
   };
-
+  // Form validasyonları
   const validateStep2 = () => {
     const step2Fields = ["cardNumber", "cardName", "expiry", "cvv"];
     let valid = true;
@@ -152,7 +152,7 @@ export default function Checkout() {
     setErrors(newErrors);
     return valid;
   };
-
+  // Ödeme işleme simülasyonu
   const processPayment = async () => {
     if (!validateStep1() || !validateStep2()) {
       alert("Please fix the errors before proceeding.");
