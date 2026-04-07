@@ -8,19 +8,17 @@ import ScenarioTable from "../ui/organism/ScenarioTable";
 
 export default function TestScenarios() {
   const [scenarios, setScenarios] = useState<scenarios[]>([]);
-
   const [sessionInfo, setSessionInfo] = useState<SessionInfo>(null);
-  const [triggeredScenarios, setTriggeredScenarios] = useState<any[]>([]); // Bunun tipini analyamadım. -Oğuzhan.
+  const [triggeredScenarios, setTriggeredScenarios] = useState<[number, number][]>([]);
 
   useEffect(() => {
     fetchData();
 
-    // Monitor triggered scenarios from SDK
     const interval = setInterval(() => {
-      if (window.ExperimentSDK) {
+      if (window.ExperimentSDK?.triggeredScenarios) {
         const triggered = Array.from(
           window.ExperimentSDK.triggeredScenarios.entries()
-        );
+        ) as [number, number][];
         setTriggeredScenarios(triggered);
       }
     }, 1000);
@@ -29,12 +27,10 @@ export default function TestScenarios() {
   }, []);
 
   const fetchData = async () => {
-    // Get session info
     const sessionRes: Response = await fetch("/api/session/info");
     const sessionData: SessionInfo = await sessionRes.json();
     setSessionInfo(sessionData);
 
-    // Get active scenarios
     const scenariosRes: Response = await fetch(
       `/api/scenarios/active?page=/test-scenarios&group=${sessionData.experimentGroup}`
     );
@@ -48,17 +44,75 @@ export default function TestScenarios() {
     }
   };
 
+  const handleFinishExperiment = async () => {
+    try {
+      const sessionId = sessionInfo?.sessionId;
+
+      if (!sessionId) {
+        alert("Session bulunamadı");
+        return;
+      }
+
+      const scenarioIds = triggeredScenarios.map(([id]) => Number(id));
+      const mouseData = window.ExperimentSDK?.mouseTrajectory || [];
+      const eyeData: any[] = [];
+
+      if (window.ExperimentSDK?.flushEvents) {
+        await window.ExperimentSDK.flushEvents();
+      }
+
+      const response = await fetch("/api/experiment/end", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          sessionId,
+          triggeredScenarios: scenarioIds,
+          mouseData,
+          eyeData,
+          finishedAt: Date.now(),
+          pageUrl: window.location.href,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        alert(result.message || "Deney kapatılamadı");
+        return;
+      }
+
+      if (window.ExperimentSDK?.triggeredScenarios) {
+        window.ExperimentSDK.triggeredScenarios.clear();
+      }
+
+      if (window.ExperimentSDK?.mouseTrajectory) {
+        window.ExperimentSDK.mouseTrajectory = [];
+      }
+
+      sessionStorage.clear();
+      localStorage.clear();
+
+      alert("Deney başarıyla tamamlandı. Yeni denek için sistem sıfırlanıyor.");
+      window.location.reload();
+    } catch (error) {
+      console.error("Deney bitirme hatası:", error);
+      alert("Deney bitirilirken hata oluştu");
+    }
+  };
+
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold mb-8">Scenario Testing Dashboard</h1>
 
-        {/* Session Info */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-8">
           <h2 className="font-bold mb-2">Session Information</h2>
           <p>
             Session ID:
-            <code className="bg-gray-100 px-2 py-1 rounded">
+            <code className="bg-gray-100 px-2 py-1 rounded ml-2">
               {sessionInfo?.sessionId?.substring(0, 16)}...
             </code>
           </p>
@@ -90,7 +144,15 @@ export default function TestScenarios() {
           </p>
         </div>
 
-        {/* Triggered Scenarios */}
+        <div className="mb-8 flex justify-end">
+          <button
+            onClick={handleFinishExperiment}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2 rounded-lg shadow"
+          >
+            Deneyi Bitir
+          </button>
+        </div>
+
         <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-8">
           <h2 className="font-bold mb-2">
             Triggered Scenarios ({triggeredScenarios.length})
@@ -106,23 +168,16 @@ export default function TestScenarios() {
             </ul>
           ) : (
             <p className="text-sm text-gray-600">
-              No scenarios triggered yet (wait 3+ seconds or click Force
-              Execute)
+              No scenarios triggered yet (wait 3+ seconds or click Force Execute)
             </p>
           )}
         </div>
 
-        {/* Test Elements */}
         <div className="grid grid-cols-2 gap-6 mb-8">
-          {/* Product Card for visual scenarios */}
-
           <TestProduct />
-
-          {/* Form for interaction scenarios */}
           <TestForm />
         </div>
 
-        {/* Available Scenarios */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">Available Scenarios</h2>
           <div className="overflow-x-auto">
@@ -133,22 +188,13 @@ export default function TestScenarios() {
           </div>
         </div>
 
-        {/* Instructions */}
         <div className="mt-8 bg-gray-50 rounded-lg p-6">
           <h3 className="font-bold mb-2">How to Test:</h3>
           <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
             <li>Check your experiment group above (affects probability)</li>
-            <li>
-              Wait 3+ seconds for automatic scenario triggers based on
-              probability
-            </li>
-            <li>
-              Or click "Force Execute" to manually trigger any enabled scenario
-            </li>
-            <li>
-              Watch for visual changes (blurred images, delayed buttons,
-              overlays)
-            </li>
+            <li>Wait 3+ seconds for automatic scenario triggers based on probability</li>
+            <li>Or click "Force Execute" to manually trigger any enabled scenario</li>
+            <li>Watch for visual changes (blurred images, delayed buttons, overlays)</li>
             <li>Check the browser console for detailed logs</li>
             <li>Go to Admin Panel → Scenarios to enable/disable scenarios</li>
           </ol>
