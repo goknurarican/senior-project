@@ -13,8 +13,13 @@
     pageLoadTime: Date.now(),
     lastScenarioTime: 0,
 
+    mouseTrajectory: [],
+    lastMouseTime: 0,
+    MOUSE_THROTTLE_MS: 100,
+    experimentStartTime: performance.now(),
+
     // AYARLAR: Çok daha agresif kaldırıldı
-    COOLDOWN_MS: 800, // Bekleme süresini 5 saniyeye düşürdüm (Daha sık saldırı kaldırıldı)
+    COOLDOWN_MS: 5000, // Bekleme süresini 5 saniyeye düşürdüm (Daha sık saldırı kaldırıldı)
     MAX_SCENARIOS_PER_SESSION: 9999,
 
     init: async function() {
@@ -23,6 +28,7 @@
         const data = await res.json();
         this.sessionId = data.sessionId || null;
         this.experimentGroup = data.experimentGroup || 'control';
+        this.phase = data.phase || 'task';
       } catch (e) { return; }
 
       if (this.experimentGroup !== 'control') {
@@ -52,6 +58,7 @@
 
               this.experimentGroup = newGroup;
               this.sessionId = e.detail?.sessionId;
+              this.phase = e.detail?.phase || this.phase || 'task';
 
               // Temizlik yap
               if (window.fetch !== window.originalFetch) window.fetch = window.originalFetch;
@@ -68,6 +75,7 @@
           }
       });
       this.trackPageView();
+      this.initMouseTracking();
       setInterval(() => this.flushEvents(), 3000);
     },
 
@@ -134,16 +142,25 @@
       console.log('⚡️ ÇALIŞIYOR:', scenario.name);
 
       // Logla
-      window.originalFetch('/api/scenarios/trigger', {
+try {
+
+  window.originalFetch('http://127.0.0.1:5001/send_negative_trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: this.sessionId,
-          scenarioId: scenario.id,
-          status: 'triggered',
-          details: { name: scenario.name, type: scenario.type, timestamp: now }
+          scenario_name: scenario.name,
+          scenario_type: scenario.type,
+          session_id: this.sessionId,
+          experiment_group: this.experimentGroup,
+          phase: this.phase,
+          page_url: window.location.href,
+          timestamp: Date.now()
         })
       }).catch(() => {});
+    } catch (err) {
+  console.warn("Python marker sunucusuna ulaşılamadı.");
+}
+    
 
       switch(scenario.type) {
         // GÖRSEL
@@ -181,6 +198,43 @@
             this.networkJitter(4000);
         });
     },
+    initMouseTracking: function() {
+  document.addEventListener('mousemove', (e) => {
+    const now = performance.now();
+
+    if (now - this.lastMouseTime > this.MOUSE_THROTTLE_MS) {
+      this.mouseTrajectory.push({
+        x: e.clientX,
+        y: e.clientY,
+        t: now - this.experimentStartTime
+      });
+
+      this.lastMouseTime = now;
+
+      if (this.mouseTrajectory.length > 500) {
+        this.mouseTrajectory.shift();
+      }
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    this.logEvent('mouse_click', {
+      x: e.clientX,
+      y: e.clientY,
+      target: e.target.tagName,
+      className: e.target.className
+    });
+  });
+
+  document.addEventListener('scroll', () => {
+    if (performance.now() - this.lastMouseTime > 500) {
+      this.logEvent('scroll', {
+        scrollY: window.scrollY
+      });
+      this.lastMouseTime = performance.now();
+    }
+  });
+},
 
     // ----------------------------------------------------
     // İMPLEMENTASYONLAR
@@ -307,25 +361,27 @@
             if(input.dataset.lag === 'true') return;
             input.dataset.lag = 'true';
 
+            let timer = null;
+
+            const handler = (e) => {
+               if (e.key.length === 1) {
+                 e.preventDefault();
+                clearTimeout(timer);
+                 timer = setTimeout(() => {
+                    input.value += e.key;
+        }, 500);
+      }
+    };
+
             // Kullanıcı her tuşa bastığında...
-            input.addEventListener('keydown', (e) => {
-                // Eğer özel tuş değilse (backspace vs.)
-                if(e.key.length === 1) {
-                    e.preventDefault(); // Yazmayı engelle
-                    // 1 saniye sonra yaz
-                    setTimeout(() => {
-                        input.value += e.key;
-                    }, 500);
-                }
-            });
-
+            input.addEventListener('keydown', handler);
             this.showToast('Keyboard input latency detected.', 'warning');
+                    setTimeout(() => {
+                        input.removeEventListener('keydown', handler);
+                        input.dataset.lag = 'false';
 
-            // 5 saniye sonra düzelt
-            setTimeout(() => {
-                // Event listener'ı tam kaldırmak zor olduğu için sadece görsel uyarı veriyoruz
-                // Basitlik adına reload gerekebilir ama şimdilik bu yeterli
-            }, 5000);
+                    }, duration);
+               
         });
     },
 
@@ -429,16 +485,34 @@ logEvent: function(eventType, eventData) {
       this.eventQueue.push({
         sessionId: this.sessionId,
         experimentGroup: this.experimentGroup, // YENİ: O anki grubu ekle (Control veya Variant)
+        phase: this.phase || 'task',
         eventType: eventType,
         eventData: eventData,
         pageUrl: window.location.href,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        relative_t_ms: performance.now() - this.experimentStartTime
       });
     }, flushEvents: async function() {
-      if (this.eventQueue.length === 0) return;
-      const events = [...this.eventQueue]; this.eventQueue = [];
-      try { await window.originalFetch('/api/events/batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(events) }); } catch (e) {}
-    },
+  if (this.mouseTrajectory.length > 0) {
+    this.logEvent('mouse_trajectory', {
+      path: [...this.mouseTrajectory]
+    });
+    this.mouseTrajectory = [];
+  }
+
+  if (this.eventQueue.length === 0) return;
+
+  const events = [...this.eventQueue];
+  this.eventQueue = [];
+
+  try {
+    await window.originalFetch('/api/events/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(events)
+    });
+  } catch (e) {}
+},
 
     threeDSSoftFail: function() {}, paymentTimeout: function() {}
   };
