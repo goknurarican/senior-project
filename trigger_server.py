@@ -222,12 +222,8 @@ def trigger_negative():
     }
 
 if __name__ == '__main__':
-<<<<<<< HEAD
-    app.run(host='127.0.0.1', port=5001) #5000 olması lazım windowsta
-=======
     if s:
         threading.Thread(target=eye_reader_loop, daemon=True).start()
         print("[INFO] EYE TRACKER: Reader thread started.")
 
     app.run(host='127.0.0.1', port=5001)
->>>>>>> lab
