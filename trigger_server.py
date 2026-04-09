@@ -7,6 +7,10 @@ import threading
 from flask import Flask, request
 from flask_cors import CORS
 from pylsl import StreamInfo, StreamOutlet, local_clock
+from data_logger import save_event, save_eye_data
+
+# GLOBAL SESSION ID (EN KRİTİK)
+current_session_id = None
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}) #runs accross different os envs
@@ -164,6 +168,20 @@ def eye_reader_loop():
                         extract_attr(line, "LPV"),
                         extract_attr(line, "RPV"),
                     ]
+                     
+                    
+                    
+                    # 🔥 DB'ye yaz (EN KRİTİK)
+                    save_eye_data(
+                    session_id=current_session_id,
+                    timestamp=row[0],
+                    gaze_x=row[1],
+                    gaze_y=row[2],
+                    pupil_left=row[7],
+                    pupil_right=row[8]
+)
+
+
                     eye_outlet.push_sample(row, local_clock())
         except socket.timeout:
             continue
@@ -188,13 +206,18 @@ def trigger_negative():
     scenario_name = data.get('scenario_name', 'UNKNOWN_SCENARIO')
     scenario_type = data.get('scenario_type', 'unknown')
     session_id = data.get('session_id')
+     
+    global current_session_id
+    current_session_id = session_id
+    
     experiment_group = data.get('experiment_group')
     phase = data.get('phase')
     page_url = data.get('page_url')
     timestamp = data.get('timestamp', int(time.time() * 1000))
-
+    
     eeg_marker = SCENARIO_MARKER_MAP.get(scenario_type, 1)
-
+    
+    
     # 1. EEG TTL
     send_eeg_marker(value=eeg_marker)
 
@@ -214,6 +237,8 @@ def trigger_negative():
         "eeg_marker": eeg_marker
     }
     send_lsl_marker(lsl_payload)
+    save_event(lsl_payload)
+
 
     return {
         "status": "success",
