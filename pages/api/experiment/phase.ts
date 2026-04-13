@@ -43,8 +43,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenario: `PHASE_CHANGE_${variant.toUpperCase()}`,
-          timestamp: Date.now()
+          session_id:       sessionId,
+          scenario_name:    `phase_change_${variant}`,
+          scenario_type:    "phase_change",
+          experiment_group: variant,
+          phase:            variant,
+          timestamp:        Date.now()
         }),
       });
     } catch (e) {}
@@ -60,8 +64,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenario: "EXPERIMENT_END",
-          timestamp: Date.now()
+          session_id:       sessionId,
+          scenario_name:    "experiment_end",
+          scenario_type:    "experiment_end",
+          experiment_group: session.experiment_group,
+          phase:            "completed",
+          timestamp:        Date.now()
         }),
       });
     } catch (e) {}

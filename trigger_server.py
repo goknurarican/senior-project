@@ -62,7 +62,8 @@ GAZEPOINT_PORT = 4242
 
 _GAZE_ENABLE_CMDS = [
     '<SET ID="ENABLE_SEND_USER_DATA" STATE="1" />\r\n',
-    '<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n',
+    '<SET ID="ENABLE_SEND_POG_BEST" STATE="1" />\r\n',   # best estimate (primary)
+    '<SET ID="ENABLE_SEND_POG_FIX" STATE="1" />\r\n',    # fixation-filtered
     '<SET ID="ENABLE_SEND_POG_LEFT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />\r\n',
@@ -236,11 +237,15 @@ def eye_reader_loop():
                         print(f"[INFO] EYE READER: Gazepoint ACK received — stream alive.")
                     continue
 
-                if 'FPOGX="' in line or 'LPOGX="' in line or 'RPOGX="' in line:
+                if ('BPOGX="' in line or 'FPOGX="' in line or
+                        'LPOGX="' in line or 'RPOGX="' in line):
                     t       = extract_attr(line, "TIME")
+                    bpogx   = extract_attr(line, "BPOGX")   # best estimate (primary)
+                    bpogy   = extract_attr(line, "BPOGY")
+                    bpogv   = extract_attr(line, "BPOGV")
                     fpogx   = extract_attr(line, "FPOGX")
                     fpogy   = extract_attr(line, "FPOGY")
-                    fpogv   = extract_attr(line, "FPOGV")   # 1=valid fixation
+                    fpogv   = extract_attr(line, "FPOGV")
                     lpogx   = extract_attr(line, "LPOGX")
                     lpogy   = extract_attr(line, "LPOGY")
                     lpogv   = extract_attr(line, "LPOGV")
@@ -248,18 +253,21 @@ def eye_reader_loop():
                     rpogy   = extract_attr(line, "RPOGY")
                     rpogv   = extract_attr(line, "RPOGV")
 
-                    # Best available gaze estimate:
-                    # 1) Valid fixation (FPOGV=1)
-                    # 2) Left eye raw POG
-                    # 3) Right eye raw POG
-                    if fpogv == 1.0 and (fpogx != 0.0 or fpogy != 0.0):
+                    # Best available gaze estimate (priority order):
+                    # 1) BPOG — Gazepoint's own best estimate (both eyes combined)
+                    # 2) Valid fixation FPOG
+                    # 3) Left eye raw POG
+                    # 4) Right eye raw POG
+                    if bpogv == 1.0 and (bpogx != 0.0 or bpogy != 0.0):
+                        gaze_x, gaze_y = bpogx, bpogy
+                    elif fpogv == 1.0 and (fpogx != 0.0 or fpogy != 0.0):
                         gaze_x, gaze_y = fpogx, fpogy
                     elif lpogv == 1.0 and (lpogx != 0.0 or lpogy != 0.0):
                         gaze_x, gaze_y = lpogx, lpogy
                     elif rpogv == 1.0 and (rpogx != 0.0 or rpogy != 0.0):
                         gaze_x, gaze_y = rpogx, rpogy
                     else:
-                        gaze_x, gaze_y = fpogx, fpogy  # save as-is even if 0
+                        gaze_x, gaze_y = bpogx, bpogy  # save as-is even if 0
 
                     # Pupil diameter in mm (LPMMV/RPMMV = valid mm value)
                     # Fall back to LPV/RPV if diameter not in this line
