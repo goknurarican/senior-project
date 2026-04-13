@@ -23,8 +23,9 @@ export async function getDb() {
   });
 
   // Concurrent access settings — must be set before initDb touches any table
-  await db.exec("PRAGMA journal_mode=WAL");   // allow concurrent readers + 1 writer
-  await db.exec("PRAGMA busy_timeout=5000");  // wait up to 5s instead of failing instantly
+  await db.exec("PRAGMA journal_mode=WAL");    // allow concurrent readers + 1 writer
+  await db.exec("PRAGMA busy_timeout=10000"); // wait up to 10s instead of failing instantly
+  await db.exec("PRAGMA synchronous=NORMAL"); // faster writes, still safe with WAL
 
   // Oluşturulan bağlantıyı globale kaydet
   global.dbInstance = db;
