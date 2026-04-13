@@ -2,6 +2,16 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
+:: Port 3000'de eski process varsa öldür
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 "') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
+:: Port 5001'de eski trigger server varsa öldür
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5001 "') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
 if not exist .next (
     echo Build yapiliyor, lutfen bekleyin...
     call npm run build
