@@ -339,6 +339,87 @@ def save_csv(rows, path, cols=None):
 
 
 # ---------------------------------------------------------------------------
+# Mouse trajectory exploder
+# ---------------------------------------------------------------------------
+
+def export_mouse_points(trajectory_events, click_events, output_dir: Path):
+    """
+    Explode batched mouse trajectory events into individual point rows.
+
+    Trajectory points: event_data = {"path": [{"x":..,"y":..,"t":..}, ...]}
+      - t is Date.now() (Unix ms) after the wall-time fix → rename to wall_time_ms
+      - x/y are viewport pixels (clientX/clientY), NOT normalized
+
+    Click events: event_data = {"x":..,"y":..,"target":..,"className":..}
+      - timestamp column already holds Date.now() (Unix ms)
+
+    Outputs:
+      mouse_trajectory_points.csv  — one row per trajectory sample
+      mouse_clicks_flat.csv        — clicks with x/y as dedicated columns
+    """
+    import json as _json
+
+    # ── Trajectory points ──────────────────────────────────────────────────
+    points = []
+    for ev in trajectory_events:
+        try:
+            ed = _json.loads(ev.get("event_data") or "{}")
+            path = ed.get("path", [])
+        except Exception:
+            continue
+        page = ev.get("page_url", "")
+        sid  = ev.get("session_id", "")
+        for pt in path:
+            points.append({
+                "wall_time_ms": pt.get("t", ""),
+                "x":            pt.get("x", ""),
+                "y":            pt.get("y", ""),
+                "page_url":     page,
+                "session_id":   sid,
+            })
+
+    if points:
+        with open(output_dir / "mouse_trajectory_points.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["wall_time_ms", "x", "y",
+                                               "page_url", "session_id"])
+            w.writeheader()
+            w.writerows(points)
+        print(f"    Mouse trajectory points: {len(points)} rows")
+    else:
+        print(f"    Mouse trajectory points: 0 rows")
+
+    # ── Clicks flat ────────────────────────────────────────────────────────
+    clicks = []
+    for ev in click_events:
+        try:
+            ed = _json.loads(ev.get("event_data") or "{}")
+        except Exception:
+            ed = {}
+        clicks.append({
+            "wall_time_ms": ev.get("timestamp", ""),
+            "x":            ed.get("x", ""),
+            "y":            ed.get("y", ""),
+            "target":       ed.get("target", ""),
+            "class_name":   ed.get("className", ""),
+            "page_url":     ev.get("page_url", ""),
+            "session_id":   ev.get("session_id", ""),
+        })
+
+    if clicks:
+        with open(output_dir / "mouse_clicks_flat.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["wall_time_ms", "x", "y",
+                                               "target", "class_name",
+                                               "page_url", "session_id"])
+            w.writeheader()
+            w.writerows(clicks)
+        print(f"    Mouse clicks (flat): {len(clicks)} rows")
+
+    return len(points), len(clicks)
+
+
+# ---------------------------------------------------------------------------
 # Main packaging function
 # ---------------------------------------------------------------------------
 
@@ -371,6 +452,9 @@ def package_subject(user_id, eeg_dir=None, gaze_file=None):
     for k in ["all_events", "mouse_trajectories", "mouse_clicks", "scenarios", "page_views"]:
         if data[k]:
             print(f"    {k}: {len(data[k])} rows")
+
+    # Exploded mouse files (one row per point, wall_time_ms aligned)
+    export_mouse_points(data["mouse_trajectories"], data["mouse_clicks"], pdir)
 
     meta = {
         "user_id":       user_id,
