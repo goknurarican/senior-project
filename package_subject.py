@@ -214,19 +214,36 @@ def export_eye_db(session_id, output_path: Path):
     """
     Export eye_data rows for this session from our SQLite DB to a CSV.
 
-    This is NOT a replacement for the native Gazepoint CSV (which has many
-    more columns and is what Gazepoint Analysis software reads).  This file
-    is for alignment in our Python analysis pipeline — it uses wall_time_ms
-    (Unix ms) so it can be directly compared to scenario timestamps.
-
     Columns:
         wall_time_ms   — Unix ms when Python received the sample (alignment key)
         gazepoint_time — Gazepoint's own TIME field (relative seconds)
         gaze_x / gaze_y           — fixation POG, 0–1 normalized
         pupil_left / pupil_right  — pupil diameter in mm
+        phase          — "control" (phase 1, no scenarios) or "variant_*" (phase 2)
+                         Derived from the phase_change marker in lsl_events.
     """
     conn = get_db()
     c = conn.cursor()
+
+    # Find the wall_time_ms of the phase transition for this session.
+    # phase_change_variant_* is sent by phase.ts when the experiment starts.
+    phase_change_ms = None
+    phase_name      = "variant"
+    try:
+        c.execute("""
+            SELECT wall_time_ms, phase
+            FROM lsl_events
+            WHERE session_id=? AND scenario_type='phase_change'
+            ORDER BY wall_time_ms ASC
+            LIMIT 1
+        """, (session_id,))
+        pc = c.fetchone()
+        if pc and pc["wall_time_ms"]:
+            phase_change_ms = pc["wall_time_ms"]
+            phase_name      = pc["phase"] or "variant"
+    except Exception:
+        pass
+
     try:
         c.execute("""
             SELECT wall_time_ms, gazepoint_time, gaze_x, gaze_y, pupil_left, pupil_right
@@ -245,16 +262,31 @@ def export_eye_db(session_id, output_path: Path):
         print(f"    Eye DB: 0 rows for session {session_id}")
         return 0
 
+    control_count = 0
+    variant_count = 0
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["wall_time_ms", "gazepoint_time", "gaze_x", "gaze_y",
-                    "pupil_left", "pupil_right"])
+                    "pupil_left", "pupil_right", "phase"])
         for r in rows:
+            if phase_change_ms and r["wall_time_ms"]:
+                phase = "control" if r["wall_time_ms"] < phase_change_ms else phase_name
+            else:
+                phase = "unknown"
+            if phase == "control":
+                control_count += 1
+            else:
+                variant_count += 1
             w.writerow([r["wall_time_ms"], r["gazepoint_time"],
                         r["gaze_x"], r["gaze_y"],
-                        r["pupil_left"], r["pupil_right"]])
+                        r["pupil_left"], r["pupil_right"], phase])
 
-    print(f"    Eye DB export: {output_path.name} ({len(rows)} rows)")
+    if phase_change_ms:
+        print(f"    Eye DB export: {output_path.name} ({len(rows)} rows) "
+              f"[control={control_count}, {phase_name}={variant_count}]")
+    else:
+        print(f"    Eye DB export: {output_path.name} ({len(rows)} rows) "
+              f"[phase_change marker not found — all labeled 'unknown']")
     return len(rows)
 
 
@@ -377,6 +409,8 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             continue
         page     = ev.get("page_url", "")
         sid      = ev.get("session_id", "")
+        # experiment_group == phase for this event ("control" or "variant_*")
+        phase    = ev.get("experiment_group") or "control"
         screen_w = ed.get("screen_w") or None
         screen_h = ed.get("screen_h") or None
         for pt in path:
@@ -389,6 +423,7 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
                 "scroll_y":     pt.get("sy", ""),
                 "velocity":     "",       # filled in next pass
                 "acceleration": "",
+                "phase":        phase,
                 "page_url":     page,
                 "session_id":   sid,
             })
@@ -413,7 +448,7 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             pt["acceleration"] = ""
 
     TRAJ_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
-                 "velocity", "acceleration", "page_url", "session_id"]
+                 "velocity", "acceleration", "phase", "page_url", "session_id"]
     if points:
         with open(output_dir / "mouse_trajectory_points.csv", "w",
                   newline="", encoding="utf-8") as f:
@@ -452,6 +487,7 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             "scroll_y":     ed.get("sy", ""),
             "button":       ed.get("button", 0),
             "is_rage_click": 0,
+            "phase":        ev.get("experiment_group") or "control",
             "target":       ed.get("target", ""),
             "class_name":   ed.get("className", ""),
             "page_url":     ev.get("page_url", ""),
@@ -477,7 +513,7 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
                 break
 
     CLICK_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
-                  "button", "is_rage_click", "target", "class_name",
+                  "button", "is_rage_click", "phase", "target", "class_name",
                   "page_url", "session_id"]
     if raw_clicks:
         with open(output_dir / "mouse_clicks_flat.csv", "w",

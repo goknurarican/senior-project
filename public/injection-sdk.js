@@ -322,6 +322,8 @@
           className: e.target.className,
           button: e.button,            // 0=left, 1=middle, 2=right
           sy: window.scrollY,
+          screen_w: window.innerWidth,
+          screen_h: window.innerHeight,
         });
       });
 
