@@ -77,6 +77,15 @@ export default async function handler(
     }
     setSessionCookie(req, res, experiment_session_id);
 
+    // Notify trigger_server so eye data is tagged from this moment on
+    try {
+      await fetch("http://127.0.0.1:5001/set_session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: experiment_session_id }),
+      });
+    } catch (_) {}
+
     setAuthCookie(req, res, newUser.id, newUser.role);
     clearGuestCookie(req, res);
     // Sonra JSON dön

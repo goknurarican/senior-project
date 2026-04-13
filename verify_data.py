@@ -222,6 +222,13 @@ def check_eye(session_id):
     print(f"  Ort. pupil_left    : {r[4]:.4f}")
     print(f"  Ort. pupil_right   : {r[5]:.4f}")
 
+    # NULL session_id ile kaydedilen (login öncesi) veri var mı?
+    c.execute("SELECT COUNT(*) FROM eye_data WHERE session_id IS NULL OR session_id=''")
+    null_n = c.fetchone()[0]
+    if null_n > 0:
+        print(f"  {WARN} {null_n} satır session_id=NULL ile kaydedilmiş (login öncesi).")
+        print(f"       → Bu fix sonrası artık olmayacak (trigger_server /set_session).")
+
     # Son 5 örnek
     c.execute("""
         SELECT wall_time_ms, gaze_x, gaze_y, pupil_left, pupil_right
