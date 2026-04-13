@@ -297,8 +297,8 @@ def trigger_negative():
     page_url = data.get('page_url')
     timestamp = data.get('timestamp', int(time.time() * 1000))
 
-    # FIX: look up by scenario_name (map keys are names, not types)
-    eeg_marker = SCENARIO_MARKER_MAP.get(scenario_name, 1)
+    # Map keys are snake_case type strings (e.g. 'sort_reset'), not display names
+    eeg_marker = SCENARIO_MARKER_MAP.get(scenario_type, 1)
 
     # Wall-clock reference recorded at the same moment for all three streams
     wall_time_ms = int(time.time() * 1000)
