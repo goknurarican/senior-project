@@ -21,6 +21,10 @@ export async function getDb() {
     driver: sqlite3.Database,
   });
 
+  // Concurrent access settings — must be set before initDb touches any table
+  await db.exec("PRAGMA journal_mode=WAL");   // allow concurrent readers + 1 writer
+  await db.exec("PRAGMA busy_timeout=5000");  // wait up to 5s instead of failing instantly
+
   // Oluşturulan bağlantıyı globale kaydet
   global.dbInstance = db;
 
