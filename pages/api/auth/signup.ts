@@ -51,20 +51,30 @@ export default async function handler(
       [result.lastID] // sor
     );
 
-    let experiment_session_id = getGuestCookie(req, res);
+    let experiment_session_id = getCookie('experiment_session_id', { req, res }) as string | undefined;
     let group = assignExperimentGroup();
 
-    await db.run(
-      `INSERT INTO sessions (id, user_id, experiment_group, user_agent, ip)
-       VALUES (?, ?, ?, ?, ?)`,
-      [
-        experiment_session_id,
-        newUser.id,                        // ← user_id eklendi
-        group,
-        req.headers["user-agent"] || "",
-        (req.socket as any).remoteAddress || "",
-      ]
-    );
+    if (experiment_session_id) {
+      // Session already exists (created by /api/session/info) — just link it to the user
+      await db.run(
+        `UPDATE sessions SET user_id=?, experiment_group=? WHERE id=?`,
+        [newUser.id, group, experiment_session_id]
+      );
+    } else {
+      // No session yet — create one
+      experiment_session_id = uuidv4();
+      await db.run(
+        `INSERT INTO sessions (id, user_id, experiment_group, user_agent, ip)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          experiment_session_id,
+          newUser.id,
+          group,
+          req.headers["user-agent"] || "",
+          (req.socket as any).remoteAddress || "",
+        ]
+      );
+    }
     setSessionCookie(req, res, experiment_session_id);
 
     setAuthCookie(req, res, newUser.id, newUser.role);
