@@ -36,6 +36,13 @@ PACKAGED_LOG_PATH = SCRIPT_DIR / "packaged_log.json"
 
 sys.path.insert(0, str(SCRIPT_DIR))
 
+# ── Optional Google Drive backup ──────────────────────────────────────────────
+try:
+    from backup_drive import backup_subject as _drive_backup
+    HAS_BACKUP = True
+except ImportError:
+    HAS_BACKUP = False   # google packages not installed — backup silently skipped
+
 # ── Packaged-user log ─────────────────────────────────────────────────────────
 
 def _load_log() -> dict:
@@ -369,6 +376,17 @@ class LabPanel(tk.Tk):
         if success:
             _mark_packaged(user_id, result_folder)
             self._packaged += 1
+
+            # ── Google Drive backup (runs right after packaging) ──────────
+            if HAS_BACKUP:
+                self._append_log(f"\n{'─'*60}\n  GOOGLE DRIVE YEDEK\n{'─'*60}\n")
+                _drive_backup(Path(result_folder), log=self._append_log)
+            else:
+                self._append_log(
+                    "\n[BACKUP] Google Drive paketi kurulu değil.\n"
+                    "  Kurmak için: pip install google-api-python-client "
+                    "google-auth-httplib2 google-auth-oauthlib\n"
+                )
 
         def _finish():
             self._set_busy(False)

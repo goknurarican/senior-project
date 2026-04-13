@@ -1,0 +1,7 @@
+{
+  "backup": {
+    "enabled": true,
+    "drive_folder_id": "1ocVHY1s70b4OsBxktsJPo6Vk1QIisYFq",
+    "copy_db": true
+  }
+}

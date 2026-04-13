@@ -50,3 +50,12 @@ next-env.d.ts
 *.db
 *.db-journal
 .aider*
+
+# Google Drive OAuth — never commit these to GitHub
+credentials.json
+token.json
+client_secret_*.json
+
+# Lab output — subject data stays local, backed up to Drive
+subjects/
+packaged_log.json
