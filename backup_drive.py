@@ -12,7 +12,17 @@ import json
 from pathlib import Path
 
 SCRIPT_DIR  = Path(__file__).resolve().parent
-CREDS_FILE  = SCRIPT_DIR / "credentials.json"
+def _find_creds_file() -> Path:
+    """Return credentials file path — accepts credentials.json or client_secret_*.json."""
+    standard = SCRIPT_DIR / "credentials.json"
+    if standard.exists():
+        return standard
+    candidates = sorted(SCRIPT_DIR.glob("client_secret_*.json"))
+    if candidates:
+        return candidates[0]
+    return standard  # will fail gracefully later with a clear message
+
+CREDS_FILE  = _find_creds_file()
 TOKEN_FILE  = SCRIPT_DIR / "token.json"
 CONFIG_FILE = SCRIPT_DIR / "lab_config.json"
 
