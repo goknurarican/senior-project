@@ -9,6 +9,7 @@ cmds = [
     '<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="1" />\r\n',
+    '<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n',
 ]
 
 print(f"Gazepoint {HOST}:{PORT} baglaniliyor...")
