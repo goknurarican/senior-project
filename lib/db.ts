@@ -2,6 +2,7 @@
 import { open } from "sqlite";
 import sqlite3 from "sqlite3";
 import path from "path";
+import bcrypt from "bcryptjs";
 
 // TypeScript için global değişken tanımı
 declare global {
@@ -154,6 +155,19 @@ async function initDb(db: any) {
   const userCount = await db.get("SELECT COUNT(*) as count FROM users");
   if (userCount.count === 0) {
     await seedUsers(db);
+  } else {
+    // Migration: fix plain-text passwords from old seed (bcrypt hashes start with $2)
+    const fixList = [
+      { email: 'admin@test.com', plain: 'admin123' },
+      { email: 'user@test.com',  plain: 'user123'  },
+    ];
+    for (const u of fixList) {
+      const row = await db.get('SELECT id, password FROM users WHERE email = ?', [u.email]);
+      if (row && !String(row.password).startsWith('$2')) {
+        const hashed = await bcrypt.hash(u.plain, 10);
+        await db.run('UPDATE users SET password = ? WHERE email = ?', [hashed, u.email]);
+      }
+    }
   }
 }
 
@@ -455,13 +469,13 @@ async function seedUsers(db: any) {
   const users = [
     {
       email: 'admin@test.com',
-      password: 'admin123',
+      password: await bcrypt.hash('admin123', 10),
       role: 'admin',
       name: 'Admin User'
     },
     {
       email: 'user@test.com',
-      password: 'user123',
+      password: await bcrypt.hash('user123', 10),
       role: 'user',
       name: 'Test User'
     }
