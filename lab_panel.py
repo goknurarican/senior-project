@@ -116,9 +116,7 @@ def _get_next_unpackaged():
     except Exception:
         pass
 
-    # ── 3. Last resort: any non-admin user in users table ─────────────────
-    # Covers case where sessions.user_id was NULL (old code) and no events
-    # were saved yet — still lets the technician trigger packaging manually.
+    # ── 3. Last resort: iterate all non-admin users newest-first ─────────
     try:
         c.execute("""
             SELECT u.id AS user_id, u.name,
@@ -128,12 +126,11 @@ def _get_next_unpackaged():
             LEFT JOIN sessions s ON s.user_id = u.id
             WHERE u.role != 'admin'
             ORDER BY u.id DESC
-            LIMIT 1
         """)
-        row = c.fetchone()
-        if row and str(row["user_id"]) not in packaged:
-            conn.close()
-            return dict(row)
+        for row in c.fetchall():
+            if str(row["user_id"]) not in packaged:
+                conn.close()
+                return dict(row)
     except Exception:
         pass
 
