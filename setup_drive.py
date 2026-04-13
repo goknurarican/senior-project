@@ -175,7 +175,7 @@ try:
     # Test: küçük bir dosya yükle
     import io
     from googleapiclient.http import MediaIoBaseUpload
-    test_content = b"BİTİRMEEG drive test OK"
+    test_content = b"BITIRMEEG drive test OK"
     media = MediaIoBaseUpload(io.BytesIO(test_content), mimetype="text/plain")
     test_file = service.files().create(
         body={"name": "_test_baglanti.txt", "parents": [folder_id]},
@@ -183,7 +183,7 @@ try:
         fields="id"
     ).execute()
     service.files().delete(fileId=test_file["id"]).execute()
-    print("  [OK]  Test dosyası yüklendi ve silindi.")
+    print("  [OK]  Test dosyasi yuklendi ve silindi.")
 
 except Exception as e:
     print(f"  [HATA] {e}")
