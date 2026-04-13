@@ -23,6 +23,8 @@ lock = threading.Lock()
 # DATABASE BAĞLANTISI
 # ===============================
 conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
+conn.execute("PRAGMA journal_mode=WAL")   # allow concurrent readers + 1 writer
+conn.execute("PRAGMA busy_timeout=5000")  # wait up to 5s instead of failing instantly
 conn.row_factory = sqlite3.Row   # allows column access by name, not just index
 cursor = conn.cursor()
 
