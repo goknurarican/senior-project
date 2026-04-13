@@ -73,7 +73,6 @@ OUTPUT_DIR  = SCRIPT_DIR / "subjects"
 GAZEPOINT_DIRS = [
     Path.home() / "Documents" / "Gazepoint",
     Path.home() / "Documents",
-    SCRIPT_DIR,
 ]
 
 # BrainVision Recorder common save locations.
