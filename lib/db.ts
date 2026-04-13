@@ -131,6 +131,10 @@ async function initDb(db: any) {
       password TEXT,
       role TEXT DEFAULT 'user',
       name TEXT,
+      age INTEGER,
+      gender TEXT,
+      handedness TEXT DEFAULT 'right',
+      vision_correction TEXT DEFAULT 'none',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -169,6 +173,16 @@ async function initDb(db: any) {
         await db.run('UPDATE users SET password = ? WHERE email = ?', [hashed, u.email]);
       }
     }
+  }
+
+  // Migration: add participant metadata columns (silently ignored if already exist)
+  for (const sql of [
+    "ALTER TABLE users ADD COLUMN age INTEGER",
+    "ALTER TABLE users ADD COLUMN gender TEXT",
+    "ALTER TABLE users ADD COLUMN handedness TEXT DEFAULT 'right'",
+    "ALTER TABLE users ADD COLUMN vision_correction TEXT DEFAULT 'none'",
+  ]) {
+    try { await db.run(sql); } catch (_) {}
   }
 }
 

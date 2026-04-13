@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: JSON.stringify({
           session_id:       sessionId,
           scenario_name:    `phase_change_${variant}`,
-          scenario_type:    "phase_change",
+          scenario_type:    "variant_start",
           experiment_group: variant,
           phase:            variant,
           timestamp:        Date.now()

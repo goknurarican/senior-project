@@ -20,7 +20,7 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { name, email, password } = req.body;
+  const { name, email, password, age, gender, handedness, vision_correction } = req.body;
 
   // Validation
   if (!name || !email || !password) {
@@ -41,9 +41,13 @@ export default async function handler(
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await db.run(
-      `INSERT INTO users (name, email, password, role) 
-       VALUES (?, ?, ?, 'user')`,
-      [name, email, hashedPassword]
+      `INSERT INTO users (name, email, password, role, age, gender, handedness, vision_correction)
+       VALUES (?, ?, ?, 'user', ?, ?, ?, ?)`,
+      [name, email, hashedPassword,
+       age ? parseInt(age) : null,
+       gender || null,
+       handedness || 'right',
+       vision_correction || 'none']
     );
 
     const newUser = await db.get(

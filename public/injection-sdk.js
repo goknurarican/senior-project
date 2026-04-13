@@ -36,6 +36,7 @@
     lastMouseTime: 0,
     MOUSE_THROTTLE_MS: 100,
     experimentStartTime: performance.now(),
+    _dragStartData: null,
 
     // === AYARLAR ===
     COOLDOWN_MS: 5000,
@@ -320,10 +321,11 @@
           y: e.clientY,
           target: e.target.tagName,
           className: e.target.className,
-          button: e.button,            // 0=left, 1=middle, 2=right
+          button: e.button,
           sy: window.scrollY,
           screen_w: window.innerWidth,
           screen_h: window.innerHeight,
+          dpr: window.devicePixelRatio,
         });
       });
 
@@ -331,6 +333,36 @@
         if (performance.now() - this.lastMouseTime > 500) {
           this.logEvent("scroll", { scrollY: window.scrollY });
           this.lastMouseTime = performance.now();
+        }
+      });
+
+      // Drag tracking: mousedown→mouseup pairs where distance > 5px
+      document.addEventListener("mousedown", (e) => {
+        this._dragStartData = {
+          x: e.clientX, y: e.clientY,
+          t: Date.now(), sy: window.scrollY,
+        };
+      });
+
+      document.addEventListener("mouseup", (e) => {
+        if (!this._dragStartData) return;
+        const start = this._dragStartData;
+        this._dragStartData = null;
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 5) {
+          this.logEvent("mouse_drag", {
+            from_x:     start.x,  from_y:  start.y,
+            to_x:       e.clientX, to_y:   e.clientY,
+            from_t:     start.t,  to_t:    Date.now(),
+            dist_px:    Math.round(dist),
+            duration_ms: Date.now() - start.t,
+            from_sy:    start.sy, to_sy:   window.scrollY,
+            screen_w:   window.innerWidth,
+            screen_h:   window.innerHeight,
+            dpr:        window.devicePixelRatio,
+          });
         }
       });
     },
@@ -603,8 +635,9 @@
     flushEvents: async function () {
       if (this.mouseTrajectory.length > 0) {
         this.logEvent("mouse_trajectory", {
-          screen_w: window.innerWidth,   // for x_norm = x / screen_w
-          screen_h: window.innerHeight,  // for y_norm = y / screen_h
+          screen_w: window.innerWidth,
+          screen_h: window.innerHeight,
+          dpr: window.devicePixelRatio,
           path: [...this.mouseTrajectory],
         });
         this.mouseTrajectory = [];

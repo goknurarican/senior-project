@@ -10,16 +10,17 @@ export default function SignUp() {
     email: "",
     password: "",
     confirmPassword: "",
+    age: "",
+    gender: "",
+    handedness: "right",
+    vision_correction: "none",
   });
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<boolean>(false);
   const router: NextRouter = useRouter();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +32,6 @@ export default function SignUp() {
       setError("Passwords do not match");
       return;
     }
-
     if (formData.password.length < 6) {
       setError("Password must be at least 6 characters long");
       return;
@@ -42,31 +42,33 @@ export default function SignUp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
+          name:             formData.name,
+          email:            formData.email,
+          password:         formData.password,
+          age:              formData.age ? parseInt(formData.age) : null,
+          gender:           formData.gender || null,
+          handedness:       formData.handedness,
+          vision_correction: formData.vision_correction,
         }),
       });
 
       const data: User = await res.json();
-      console.log("Sign up DATA : ", data.user);
       if (res.ok) {
         await fetch("/api/auth/me");
-
         setSuccess(true);
-        //2 saniye sonra geri dönderiyo havalı olsun diye.
         setTimeout(() => {
-          router.push("/").then(() => {
-            window.location.reload();
-          });
+          router.push("/").then(() => window.location.reload());
         }, 2000);
       } else {
-        setError(error || "Sign up failed");
+        setError((data as any).error || "Sign up failed");
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
     }
   };
+
+  const inputCls = "mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm";
+  const labelCls = "block text-sm font-medium text-gray-700";
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -78,76 +80,87 @@ export default function SignUp() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
               {error}
             </div>
           )}
-
           {success && (
-            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-              Account created successfully! Redirecting to login...
+            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded text-sm">
+              Account created successfully! Redirecting...
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Full Name
-              </label>
-              <input
-                type="text"
-                name="name"
-                required
-                value={formData.name}
-                onChange={handleChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="John Doe"
-              />
+              <label className={labelCls}>Full Name</label>
+              <input type="text" name="name" required value={formData.name}
+                onChange={handleChange} className={inputCls} placeholder="John Doe" />
             </div>
 
+            {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="john@example.com"
-              />
+              <label className={labelCls}>Email</label>
+              <input type="email" name="email" required value={formData.email}
+                onChange={handleChange} className={inputCls} placeholder="john@example.com" />
             </div>
 
+            {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                type="password"
-                name="password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="At least 6 characters"
-              />
+              <label className={labelCls}>Password</label>
+              <input type="password" name="password" required value={formData.password}
+                onChange={handleChange} className={inputCls} placeholder="At least 6 characters" />
             </div>
 
+            {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                name="confirmPassword"
-                required
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Re-enter your password"
-              />
+              <label className={labelCls}>Confirm Password</label>
+              <input type="password" name="confirmPassword" required value={formData.confirmPassword}
+                onChange={handleChange} className={inputCls} placeholder="Re-enter your password" />
+            </div>
+
+            <hr className="border-gray-200" />
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+              Participant Information (for research purposes)
+            </p>
+
+            {/* Age */}
+            <div>
+              <label className={labelCls}>Age</label>
+              <input type="number" name="age" min="18" max="99" value={formData.age}
+                onChange={handleChange} className={inputCls} placeholder="e.g. 24" />
+            </div>
+
+            {/* Gender */}
+            <div>
+              <label className={labelCls}>Gender</label>
+              <select name="gender" value={formData.gender} onChange={handleChange} className={inputCls}>
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="non_binary">Non-binary</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            {/* Handedness */}
+            <div>
+              <label className={labelCls}>Dominant Hand</label>
+              <select name="handedness" value={formData.handedness} onChange={handleChange} className={inputCls}>
+                <option value="right">Right</option>
+                <option value="left">Left</option>
+                <option value="ambidextrous">Ambidextrous</option>
+              </select>
+            </div>
+
+            {/* Vision correction */}
+            <div>
+              <label className={labelCls}>Vision Correction</label>
+              <select name="vision_correction" value={formData.vision_correction} onChange={handleChange} className={inputCls}>
+                <option value="none">None</option>
+                <option value="glasses">Glasses</option>
+                <option value="contact_lenses">Contact Lenses</option>
+              </select>
             </div>
 
             <button
@@ -162,20 +175,13 @@ export default function SignUp() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{" "}
-              <Link
-                href="/login"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
+              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
                 Sign in here
               </Link>
             </p>
           </div>
-
           <div className="mt-4 text-center">
-            <Link
-              href="/"
-              className="text-sm text-blue-600 hover:text-blue-500"
-            >
+            <Link href="/" className="text-sm text-blue-600 hover:text-blue-500">
               Continue as guest →
             </Link>
           </div>

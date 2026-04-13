@@ -50,8 +50,9 @@ def _flush_eye_buffer_locked():
             cursor.executemany(
                 """INSERT INTO eye_data
                    (session_id, gazepoint_time, wall_time_ms,
-                    gaze_x, gaze_y, pupil_left, pupil_right)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    gaze_x, gaze_y, pupil_left, pupil_right,
+                    bpogv, fpogv)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 rows,
             )
             conn.commit()
@@ -97,7 +98,9 @@ CREATE TABLE IF NOT EXISTS eye_data (
     gaze_x REAL,
     gaze_y REAL,
     pupil_left REAL,
-    pupil_right REAL
+    pupil_right REAL,
+    bpogv INTEGER DEFAULT 0,
+    fpogv INTEGER DEFAULT 0
 )
 """)
 
@@ -109,6 +112,8 @@ for _sql in [
     "ALTER TABLE lsl_events ADD COLUMN wall_time_ms INTEGER",
     "ALTER TABLE eye_data ADD COLUMN gazepoint_time REAL",
     "ALTER TABLE eye_data ADD COLUMN wall_time_ms INTEGER",
+    "ALTER TABLE eye_data ADD COLUMN bpogv INTEGER DEFAULT 0",
+    "ALTER TABLE eye_data ADD COLUMN fpogv INTEGER DEFAULT 0",
 ]:
     try:
         cursor.execute(_sql)
@@ -172,15 +177,19 @@ def save_event(data):
 # ===============================
 # EYE TRACKING
 # ===============================
-def save_eye_data(session_id, gazepoint_time, wall_time_ms, gaze_x, gaze_y, pupil_left, pupil_right):
+def save_eye_data(session_id, gazepoint_time, wall_time_ms, gaze_x, gaze_y,
+                  pupil_left, pupil_right, bpogv=0, fpogv=0):
     """
     Buffer a single eye sample. The background flush thread commits to DB every 0.5 s.
     gazepoint_time : float — Gazepoint TIME field (relative seconds)
     wall_time_ms   : int   — Unix ms at sample receipt (used for cross-stream alignment)
+    bpogv          : int   — 1 if best-POG is valid (not a blink/lost-tracking sample)
+    fpogv          : int   — 1 if fixation-POG is valid
     """
     with _eye_buffer_lock:
         _eye_buffer.append((session_id, gazepoint_time, wall_time_ms,
-                            gaze_x, gaze_y, pupil_left, pupil_right))
+                            gaze_x, gaze_y, pupil_left, pupil_right,
+                            bpogv, fpogv))
         if len(_eye_buffer) >= _EYE_BATCH_SIZE:
             _flush_eye_buffer_locked()
 

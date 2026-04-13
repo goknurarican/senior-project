@@ -142,20 +142,25 @@ print("[INFO] LSL: WebMarkers stream initialized.")
 
 # Keys are scenario_name values — must use scenario_name for lookup (not scenario_type)
 SCENARIO_MARKER_MAP = {
-    "slow_image": 11,
-    "broken_image": 12,
-    "skeleton_prolong": 13,
+    # Session / phase markers (S 1, S 2, S 99)
+    "control_start":  1,    # S 1  — control phase begins (eye tracking live)
+    "variant_start":  2,    # S 2  — variant (experiment) phase begins
+    "experiment_end": 99,   # S 99 — session complete
+    # UX frustration scenarios (S 11–S 24)
+    "slow_image":        11,
+    "broken_image":      12,
+    "skeleton_prolong":  13,
     "search_irrelevant": 14,
-    "button_delay": 15,
-    "first_click_miss": 16,
-    "feedback_late": 17,
-    "network_jitter": 18,
-    "overlay_blocking": 19,
-    "price_change": 20,
-    "coupon_min_spend": 21,
-    "coupon_expired": 22,
-    "facet_reset_once": 23,
-    "sort_reset": 24
+    "button_delay":      15,
+    "first_click_miss":  16,
+    "feedback_late":     17,
+    "network_jitter":    18,
+    "overlay_blocking":  19,
+    "price_change":      20,
+    "coupon_min_spend":  21,
+    "coupon_expired":    22,
+    "facet_reset_once":  23,
+    "sort_reset":        24,
 }
 
 # ==========================================
@@ -274,6 +279,10 @@ def eye_reader_loop():
                     pupil_left  = extract_attr(line, "LPMMV") or extract_attr(line, "LPV")
                     pupil_right = extract_attr(line, "RPMMV") or extract_attr(line, "RPV")
 
+                    # Validity flags — 1 = valid sample, 0 = unreliable (blink/lost tracking)
+                    bpogv = int(bpogv)   # best POG valid
+                    fpogv = int(fpogv)   # fixation POG valid
+
                     row = [t, fpogx, fpogy, lpogx, lpogy, rpogx, rpogy, pupil_left, pupil_right]
 
                     # Wall-clock ms at the moment this sample arrives — used for
@@ -289,7 +298,9 @@ def eye_reader_loop():
                         gaze_x=gaze_x,
                         gaze_y=gaze_y,
                         pupil_left=pupil_left,
-                        pupil_right=pupil_right
+                        pupil_right=pupil_right,
+                        bpogv=bpogv,
+                        fpogv=fpogv,
                     )
 
                     eye_outlet.push_sample(row, local_clock())
@@ -335,6 +346,8 @@ def set_session():
     if sid:
         set_current_session_id(sid)
         print(f"[INFO] SESSION: session_id set to {sid}")
+        # S 1 = control phase start — fires when participant logs in
+        threading.Thread(target=send_eeg_marker, kwargs={"value": 1}, daemon=True).start()
         return {"status": "ok", "session_id": sid}
     return {"status": "error", "message": "session_id missing"}, 400
 
