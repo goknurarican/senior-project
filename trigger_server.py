@@ -199,6 +199,8 @@ def eye_reader_loop():
     """
     global gaze_socket
     buffer = ""
+    _sample_count = 0
+    _last_log_time = time.time()
 
     while True:
         with _gaze_socket_lock:
@@ -211,7 +213,6 @@ def eye_reader_loop():
         try:
             chunk = sock.recv(4096).decode("utf-8", errors="ignore")
             if not chunk:
-                # Gazepoint closed the connection
                 print("[WARN] EYE READER: Connection dropped, reconnecting...")
                 with _gaze_socket_lock:
                     gaze_socket = None
@@ -225,7 +226,13 @@ def eye_reader_loop():
                 line, buffer = buffer.split("\r\n", 1)
                 line = line.strip()
 
-                if not line or "<ACK" in line:
+                if not line:
+                    continue
+
+                # Log first ACK to confirm stream is alive
+                if "<ACK" in line:
+                    if _sample_count == 0:
+                        print(f"[INFO] EYE READER: Gazepoint ACK received — stream alive.")
                     continue
 
                 if 'FPOGX="' in line or 'LPOGX="' in line or 'RPOGX="' in line:
@@ -258,6 +265,12 @@ def eye_reader_loop():
                     )
 
                     eye_outlet.push_sample(row, local_clock())
+
+                    _sample_count += 1
+                    now = time.time()
+                    if now - _last_log_time >= 30:
+                        print(f"[INFO] EYE READER: {_sample_count} samples saved so far.")
+                        _last_log_time = now
 
         except socket.timeout:
             continue
