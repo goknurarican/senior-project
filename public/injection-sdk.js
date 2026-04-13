@@ -306,7 +306,7 @@
           this.mouseTrajectory.push({
             x: e.clientX,
             y: e.clientY,
-            t: now - this.experimentStartTime,
+            t: Date.now(),
           });
           this.lastMouseTime = now;
           if (this.mouseTrajectory.length > 500) this.mouseTrajectory.shift();
