@@ -55,10 +55,11 @@ export default async function handler(
     let group = assignExperimentGroup();
 
     await db.run(
-      `INSERT INTO sessions (id, experiment_group, user_agent, ip)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, user_id, experiment_group, user_agent, ip)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         experiment_session_id,
+        newUser.id,                        // ← user_id eklendi
         group,
         req.headers["user-agent"] || "",
         (req.socket as any).remoteAddress || "",
