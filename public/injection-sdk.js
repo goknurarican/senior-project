@@ -307,6 +307,7 @@
             x: e.clientX,
             y: e.clientY,
             t: Date.now(),
+            sy: window.scrollY,        // scroll position for absolute page context
           });
           this.lastMouseTime = now;
           if (this.mouseTrajectory.length > 500) this.mouseTrajectory.shift();
@@ -319,6 +320,8 @@
           y: e.clientY,
           target: e.target.tagName,
           className: e.target.className,
+          button: e.button,            // 0=left, 1=middle, 2=right
+          sy: window.scrollY,
         });
       });
 
@@ -598,6 +601,8 @@
     flushEvents: async function () {
       if (this.mouseTrajectory.length > 0) {
         this.logEvent("mouse_trajectory", {
+          screen_w: window.innerWidth,   // for x_norm = x / screen_w
+          screen_h: window.innerHeight,  // for y_norm = y / screen_h
           path: [...this.mouseTrajectory],
         });
         this.mouseTrajectory = [];

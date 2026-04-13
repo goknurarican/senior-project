@@ -344,20 +344,28 @@ def save_csv(rows, path, cols=None):
 
 def export_mouse_points(trajectory_events, click_events, output_dir: Path):
     """
-    Explode batched mouse trajectory events into individual point rows.
+    Explode batched mouse trajectory events into ML-ready feature rows.
 
-    Trajectory points: event_data = {"path": [{"x":..,"y":..,"t":..}, ...]}
-      - t is Date.now() (Unix ms) after the wall-time fix → rename to wall_time_ms
-      - x/y are viewport pixels (clientX/clientY), NOT normalized
+    Trajectory CSV columns (mouse_trajectory_points.csv):
+      wall_time_ms   Unix ms — aligns with eye_data.wall_time_ms and lsl_events.wall_time_ms
+      x, y           viewport pixels (clientX/clientY)
+      x_norm, y_norm 0–1 normalised (same coordinate space as Gazepoint gaze_x/gaze_y)
+      scroll_y       window.scrollY — absolute page position
+      velocity       px/ms between this and previous point (erratic movement indicator)
+      acceleration   Δvelocity/Δt — sudden stops/bursts
+      page_url
+      session_id
 
-    Click events: event_data = {"x":..,"y":..,"target":..,"className":..}
-      - timestamp column already holds Date.now() (Unix ms)
-
-    Outputs:
-      mouse_trajectory_points.csv  — one row per trajectory sample
-      mouse_clicks_flat.csv        — clicks with x/y as dedicated columns
+    Click CSV columns (mouse_clicks_flat.csv):
+      wall_time_ms
+      x, y, x_norm, y_norm, scroll_y
+      button         0=left 1=middle 2=right
+      is_rage_click  1 if ≥2 left clicks within 500 ms and 60 px of same spot
+      target, class_name
+      page_url, session_id
     """
     import json as _json
+    import math
 
     # ── Trajectory points ──────────────────────────────────────────────────
     points = []
@@ -367,56 +375,121 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             path = ed.get("path", [])
         except Exception:
             continue
-        page = ev.get("page_url", "")
-        sid  = ev.get("session_id", "")
+        page     = ev.get("page_url", "")
+        sid      = ev.get("session_id", "")
+        screen_w = ed.get("screen_w") or None
+        screen_h = ed.get("screen_h") or None
         for pt in path:
             points.append({
                 "wall_time_ms": pt.get("t", ""),
                 "x":            pt.get("x", ""),
                 "y":            pt.get("y", ""),
+                "x_norm":       round(pt["x"] / screen_w, 6) if screen_w and pt.get("x") != "" else "",
+                "y_norm":       round(pt["y"] / screen_h, 6) if screen_h and pt.get("y") != "" else "",
+                "scroll_y":     pt.get("sy", ""),
+                "velocity":     "",       # filled in next pass
+                "acceleration": "",
                 "page_url":     page,
                 "session_id":   sid,
             })
 
+    # Compute velocity and acceleration between consecutive points
+    for i, pt in enumerate(points):
+        if i == 0:
+            pt["velocity"] = 0.0
+            pt["acceleration"] = 0.0
+            continue
+        prev = points[i - 1]
+        try:
+            dx = float(pt["x"]) - float(prev["x"])
+            dy = float(pt["y"]) - float(prev["y"])
+            dt = float(pt["wall_time_ms"]) - float(prev["wall_time_ms"])
+            v  = math.sqrt(dx*dx + dy*dy) / dt if dt > 0 else 0.0
+            pt["velocity"] = round(v, 6)
+            prev_v = float(prev["velocity"]) if prev["velocity"] != "" else 0.0
+            pt["acceleration"] = round((v - prev_v) / dt, 8) if dt > 0 else 0.0
+        except (TypeError, ValueError):
+            pt["velocity"] = ""
+            pt["acceleration"] = ""
+
+    TRAJ_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
+                 "velocity", "acceleration", "page_url", "session_id"]
     if points:
         with open(output_dir / "mouse_trajectory_points.csv", "w",
                   newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["wall_time_ms", "x", "y",
-                                               "page_url", "session_id"])
+            w = csv.DictWriter(f, fieldnames=TRAJ_COLS)
             w.writeheader()
             w.writerows(points)
-        print(f"    Mouse trajectory points: {len(points)} rows")
+        print(f"    Mouse trajectory points: {len(points)} rows "
+              f"(velocity + norm included)")
     else:
         print(f"    Mouse trajectory points: 0 rows")
 
     # ── Clicks flat ────────────────────────────────────────────────────────
-    clicks = []
+    # Rage click: left-button click within 500 ms AND 60 px of a previous click
+    RAGE_WINDOW_MS = 500
+    RAGE_RADIUS_PX = 60
+
+    raw_clicks = []
     for ev in click_events:
         try:
             ed = _json.loads(ev.get("event_data") or "{}")
         except Exception:
             ed = {}
-        clicks.append({
+        try:
+            sw = ed.get("screen_w") or None
+            sh = ed.get("screen_h") or None
+            cx = ed.get("x", "")
+            cy = ed.get("y", "")
+        except Exception:
+            sw = sh = None; cx = cy = ""
+        raw_clicks.append({
             "wall_time_ms": ev.get("timestamp", ""),
-            "x":            ed.get("x", ""),
-            "y":            ed.get("y", ""),
+            "x":            cx,
+            "y":            cy,
+            "x_norm":       round(float(cx) / sw, 6) if sw and cx != "" else "",
+            "y_norm":       round(float(cy) / sh, 6) if sh and cy != "" else "",
+            "scroll_y":     ed.get("sy", ""),
+            "button":       ed.get("button", 0),
+            "is_rage_click": 0,
             "target":       ed.get("target", ""),
             "class_name":   ed.get("className", ""),
             "page_url":     ev.get("page_url", ""),
             "session_id":   ev.get("session_id", ""),
         })
 
-    if clicks:
+    for i, ck in enumerate(raw_clicks):
+        if ck["button"] != 0:
+            continue
+        try:
+            t1 = float(ck["wall_time_ms"]); x1 = float(ck["x"]); y1 = float(ck["y"])
+        except (TypeError, ValueError):
+            continue
+        for prev in raw_clicks[max(0, i-10):i]:
+            if prev["button"] != 0:
+                continue
+            try:
+                t0 = float(prev["wall_time_ms"]); x0 = float(prev["x"]); y0 = float(prev["y"])
+            except (TypeError, ValueError):
+                continue
+            if (t1 - t0) <= RAGE_WINDOW_MS and math.sqrt((x1-x0)**2 + (y1-y0)**2) <= RAGE_RADIUS_PX:
+                ck["is_rage_click"] = 1
+                break
+
+    CLICK_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
+                  "button", "is_rage_click", "target", "class_name",
+                  "page_url", "session_id"]
+    if raw_clicks:
         with open(output_dir / "mouse_clicks_flat.csv", "w",
                   newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["wall_time_ms", "x", "y",
-                                               "target", "class_name",
-                                               "page_url", "session_id"])
+            w = csv.DictWriter(f, fieldnames=CLICK_COLS)
             w.writeheader()
-            w.writerows(clicks)
-        print(f"    Mouse clicks (flat): {len(clicks)} rows")
+            w.writerows(raw_clicks)
+        rage = sum(1 for c in raw_clicks if c["is_rage_click"])
+        print(f"    Mouse clicks (flat): {len(raw_clicks)} rows "
+              f"({rage} rage clicks detected)")
 
-    return len(points), len(clicks)
+    return len(points), len(raw_clicks)
 
 
 # ---------------------------------------------------------------------------
