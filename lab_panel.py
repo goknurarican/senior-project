@@ -79,7 +79,7 @@ def _get_next_unpackaged():
     conn = _db()
     c = conn.cursor()
 
-    # ── Try sessions table first ──────────────────────────────────────────
+    # ── 1. sessions JOIN users (user_id set — new code) ───────────────────
     try:
         c.execute("""
             SELECT s.user_id, u.name, s.experiment_group AS grp,
@@ -96,7 +96,7 @@ def _get_next_unpackaged():
     except Exception:
         pass
 
-    # ── Fall back to events table ─────────────────────────────────────────
+    # ── 2. events JOIN users (works when cookie sent correctly) ───────────
     try:
         c.execute("""
             SELECT e.user_id, u.name,
@@ -113,6 +113,60 @@ def _get_next_unpackaged():
             if str(row["user_id"]) not in packaged:
                 conn.close()
                 return dict(row)
+    except Exception:
+        pass
+
+    # ── 3. Last resort: any non-admin user in users table ─────────────────
+    # Covers case where sessions.user_id was NULL (old code) and no events
+    # were saved yet — still lets the technician trigger packaging manually.
+    try:
+        c.execute("""
+            SELECT u.id AS user_id, u.name,
+                   s.experiment_group AS grp,
+                   s.id AS session_id, s.created_at
+            FROM users u
+            LEFT JOIN sessions s ON s.user_id = u.id
+            WHERE u.role != 'admin'
+            ORDER BY u.id DESC
+            LIMIT 1
+        """)
+        row = c.fetchone()
+        if row and str(row["user_id"]) not in packaged:
+            conn.close()
+            return dict(row)
+    except Exception:
+        pass
+
+    # ── 4. sessions without user_id (old code — match by recency) ─────────
+    try:
+        c.execute("""
+            SELECT s.id AS session_id, s.experiment_group AS grp,
+                   s.created_at, s.user_id
+            FROM sessions s
+            WHERE s.user_id IS NULL
+            ORDER BY s.created_at DESC
+            LIMIT 1
+        """)
+        row = c.fetchone()
+        if row:
+            # Try to find the matching user from events for this session
+            c.execute("""
+                SELECT e.user_id, u.name
+                FROM events e
+                JOIN users u ON u.id = e.user_id
+                WHERE e.session_id = ? AND u.role != 'admin'
+                LIMIT 1
+            """, (row["session_id"],))
+            user_row = c.fetchone()
+            if user_row and str(user_row["user_id"]) not in packaged:
+                conn.close()
+                return {
+                    "user_id":    user_row["user_id"],
+                    "name":       user_row["name"],
+                    "grp":        row["grp"],
+                    "session_id": row["session_id"],
+                    "created_at": row["created_at"],
+                }
     except Exception:
         pass
 
@@ -273,16 +327,21 @@ class LabPanel(tk.Tk):
             self._btn.configure(state="normal", bg=GREEN)
         else:
             all_n = _count_all_users()
-            self._lbl_user.configure(
-                text="Paketlenecek denek yok" if all_n > 0 else "Veri tabanında denek bulunamadı",
-                fg=GREY
-            )
+            if not DB_PATH.exists():
+                user_text   = "experiment.db bulunamadı"
+                status_text = f"DB yolu: {DB_PATH}\nnpm start çalışıyor mu? Denek giriş yaptı mı?"
+                status_fg   = RED
+            elif all_n == 0:
+                user_text   = "Veritabanında denek yok"
+                status_text = f"DB bulundu ama kullanıcı yok. Denek kayıt oldu mu?"
+                status_fg   = ORANGE
+            else:
+                user_text   = "Paketlenecek denek yok"
+                status_text = f"Tüm {all_n} denek zaten paketlendi."
+                status_fg   = GREY
+            self._lbl_user.configure(text=user_text, fg=GREY)
             self._lbl_group.configure(text="—", fg=GREY)
-            self._lbl_status.configure(
-                text="Tüm denekler paketlendi." if all_n > 0
-                else "experiment.db bulunamadı veya henüz denek yok.",
-                fg=GREY
-            )
+            self._lbl_status.configure(text=status_text, fg=status_fg)
             self._btn.configure(state="disabled", bg=GREY)
 
     def _set_busy(self, busy: bool):
