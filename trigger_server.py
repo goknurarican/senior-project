@@ -67,6 +67,7 @@ _GAZE_ENABLE_CMDS = [
     '<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="1" />\r\n',
+    '<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n',  # master switch — must be last
 ]
 
 # Global Gazepoint socket (updated on reconnect)
