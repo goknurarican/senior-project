@@ -68,6 +68,7 @@ _GAZE_ENABLE_CMDS = [
     '<SET ID="ENABLE_SEND_POG_RIGHT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />\r\n',
     '<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="1" />\r\n',
+    '<SET ID="ENABLE_SEND_BLINK" STATE="1" />\r\n',       # blink events (BKID, BKDUR)
     '<SET ID="ENABLE_SEND_DATA" STATE="1" />\r\n',  # master switch — must be last
 ]
 
@@ -161,6 +162,12 @@ SCENARIO_MARKER_MAP = {
     "coupon_expired":    22,
     "facet_reset_once":  23,
     "sort_reset":        24,
+    # Task-level user action markers (S 30–S 34)
+    "add_to_cart":       30,  # S 30 — user added a product to cart
+    "checkout_start":    31,  # S 31 — user navigated to checkout page
+    "purchase_complete":  32,  # S 32 — order placed successfully
+    "search_performed":  33,  # S 33 — user submitted a search query
+    "product_viewed":    34,  # S 34 — user opened a product detail page
 }
 
 # ==========================================
@@ -283,6 +290,11 @@ def eye_reader_loop():
                     bpogv = int(bpogv)   # best POG valid
                     fpogv = int(fpogv)   # fixation POG valid
 
+                    # Blink detection (requires ENABLE_SEND_BLINK)
+                    # BKID > 0 means this sample belongs to a new blink event
+                    bkid  = extract_attr(line, "BKID")
+                    bkdur = extract_attr(line, "BKDUR")  # blink duration in seconds
+
                     row = [t, fpogx, fpogy, lpogx, lpogy, rpogx, rpogy, pupil_left, pupil_right]
 
                     # Wall-clock ms at the moment this sample arrives — used for
@@ -302,6 +314,18 @@ def eye_reader_loop():
                         bpogv=bpogv,
                         fpogv=fpogv,
                     )
+
+                    # Save blink event when a new blink is detected (BKID increments per blink)
+                    if bkid > 0:
+                        save_event({
+                            "session_id":    sid,
+                            "scenario_name": f"blink_{int(bkid)}",
+                            "scenario_type": "blink",
+                            "wall_time_ms":  wall_time_ms,
+                            "timestamp":     wall_time_ms,
+                            "eeg_marker":    0,
+                            "bkdur_s":       bkdur,
+                        })
 
                     eye_outlet.push_sample(row, local_clock())
 

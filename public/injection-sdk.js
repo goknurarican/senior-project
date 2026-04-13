@@ -37,6 +37,7 @@
     MOUSE_THROTTLE_MS: 100,
     experimentStartTime: performance.now(),
     _dragStartData: null,
+    _lastScrollY: 0,
 
     // === AYARLAR ===
     COOLDOWN_MS: 5000,
@@ -72,6 +73,14 @@
           if (oldOverlay) oldOverlay.remove();
 
           this.pageLoadTime = Date.now();
+
+          // Task-level EEG markers — fire on key navigation events (both phases)
+          const path = window.location.pathname;
+          const qs   = window.location.search;
+          if (path.includes("/checkout"))           this.sendTaskMarker("checkout_start");   // S 31
+          else if (path.match(/\/products\/\d+/))   this.sendTaskMarker("product_viewed");   // S 34
+          else if (qs.includes("search="))          this.sendTaskMarker("search_performed"); // S 33
+
           await this.loadScenarios();
         });
       }
@@ -292,9 +301,26 @@
       }
     },
 
+    sendTaskMarker: function (taskType) {
+      window.originalFetch("http://127.0.0.1:5001/send_negative_trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scenario_name:    taskType,
+          scenario_type:    taskType,
+          session_id:       this.sessionId,
+          experiment_group: this.experimentGroup,
+          phase:            this.phase,
+          page_url:         window.location.href,
+          timestamp:        Date.now(),
+        }),
+      }).catch(() => {});
+    },
+
     attachCartListeners: function () {
       window.addEventListener("cart:refresh", () => {
         console.log("😈 Sepet eklendi! Şoklama yapılıyor...");
+        this.sendTaskMarker("add_to_cart");   // S 30 — EEG + LSL + eye tracker
         this.overlayBlocking(3000);
         this.networkJitter(4000);
       });
@@ -316,22 +342,34 @@
       });
 
       document.addEventListener("click", (e) => {
+        const t = e.target;
         this.logEvent("mouse_click", {
-          x: e.clientX,
-          y: e.clientY,
-          target: e.target.tagName,
-          className: e.target.className,
-          button: e.button,
-          sy: window.scrollY,
-          screen_w: window.innerWidth,
-          screen_h: window.innerHeight,
-          dpr: window.devicePixelRatio,
+          x:          e.clientX,
+          y:          e.clientY,
+          target:     t.tagName,
+          id:         t.id || "",
+          className:  t.className || "",
+          href:       t.href || t.closest("a")?.href || "",
+          text:       (t.innerText || t.value || "").trim().slice(0, 60),
+          button:     e.button,
+          sy:         window.scrollY,
+          screen_w:   window.innerWidth,
+          screen_h:   window.innerHeight,
+          phys_w:     screen.width,
+          phys_h:     screen.height,
+          dpr:        window.devicePixelRatio,
         });
       });
 
       document.addEventListener("scroll", () => {
         if (performance.now() - this.lastMouseTime > 500) {
-          this.logEvent("scroll", { scrollY: window.scrollY });
+          const delta = window.scrollY - (this._lastScrollY || 0);
+          this.logEvent("scroll", {
+            scrollY:    window.scrollY,
+            delta_y:    delta,
+            direction:  delta > 0 ? "down" : "up",
+          });
+          this._lastScrollY = window.scrollY;
           this.lastMouseTime = performance.now();
         }
       });
@@ -635,9 +673,11 @@
     flushEvents: async function () {
       if (this.mouseTrajectory.length > 0) {
         this.logEvent("mouse_trajectory", {
-          screen_w: window.innerWidth,
-          screen_h: window.innerHeight,
-          dpr: window.devicePixelRatio,
+          screen_w:  window.innerWidth,
+          screen_h:  window.innerHeight,
+          phys_w:    screen.width,
+          phys_h:    screen.height,
+          dpr:       window.devicePixelRatio,
           path: [...this.mouseTrajectory],
         });
         this.mouseTrajectory = [];

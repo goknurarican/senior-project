@@ -110,6 +110,12 @@ SCENARIO_MARKER_MAP = {
     "coupon_expired":    22,
     "facet_reset_once":  23,
     "sort_reset":        24,
+    # Task-level user action markers
+    "add_to_cart":       30,
+    "checkout_start":    31,
+    "purchase_complete":  32,
+    "search_performed":  33,
+    "product_viewed":    34,
 }
 
 
@@ -215,6 +221,11 @@ def write_marker_legend(eegdir: Path):
         22: "Coupon rejected — code expired",
         23: "Filter / facet reset unexpectedly",
         24: "Sort order reset unexpectedly",
+        30: "User added a product to cart",
+        31: "User navigated to checkout page",
+        32: "Order placed successfully",
+        33: "User submitted a search query",
+        34: "User opened a product detail page",
     }
 
     with open(eegdir / "marker_legend.csv", "w", newline="", encoding="utf-8") as f:
