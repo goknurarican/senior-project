@@ -6,7 +6,8 @@ import { getGuestCookie, setSessionCookie } from "./auth";
 
 export async function createSession(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
+  userId?: number
 ): Promise<{ sessionId: string; group: ExperimentGroup; phase: string; assignedVariant: string }> {
   const db = await getDb();
   const sessionId = getGuestCookie(req, res);
@@ -22,12 +23,13 @@ export async function createSession(
     // Control grubuna düşerse zaten iki fazda da senaryo tetiklenmez
   }
 
-  // ← YENİ: phase=control ile başla, assigned_variant'ı sakla
+  // phase=control ile başla, assigned_variant ve user_id sakla
   await db.run(
-    `INSERT INTO sessions (id, experiment_group, phase, assigned_variant, user_agent, ip)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sessions (id, user_id, experiment_group, phase, assigned_variant, user_agent, ip)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       sessionId,
+      userId ?? null,                   // ← user_id (login'den geliyor)
       "control",                        // ← Başlangıçta CONTROL
       "control",                        // ← Phase = control
       assignedVariant,                  // ← Asıl variant saklanıyor
