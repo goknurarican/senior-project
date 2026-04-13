@@ -295,6 +295,23 @@ def send_lsl_marker(payload):
 # ==========================================
 # WEB API (Endpoint for the frontend SDK)
 # ==========================================
+
+@app.route('/set_session', methods=['POST'])
+def set_session():
+    """
+    Called by Next.js immediately after login/signup so eye data is tagged
+    with the correct session_id from the very start of the experiment,
+    not only after the first scenario trigger.
+    """
+    data = request.get_json() or {}
+    sid = data.get('session_id')
+    if sid:
+        set_current_session_id(sid)
+        print(f"[INFO] SESSION: session_id set to {sid}")
+        return {"status": "ok", "session_id": sid}
+    return {"status": "error", "message": "session_id missing"}, 400
+
+
 @app.route('/send_negative_trigger', methods=['POST'])
 def trigger_negative():
     data = request.get_json() or {}
