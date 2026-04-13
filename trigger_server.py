@@ -237,17 +237,36 @@ def eye_reader_loop():
                     continue
 
                 if 'FPOGX="' in line or 'LPOGX="' in line or 'RPOGX="' in line:
-                    row = [
-                        extract_attr(line, "TIME"),
-                        extract_attr(line, "FPOGX"),
-                        extract_attr(line, "FPOGY"),
-                        extract_attr(line, "LPOGX"),
-                        extract_attr(line, "LPOGY"),
-                        extract_attr(line, "RPOGX"),
-                        extract_attr(line, "RPOGY"),
-                        extract_attr(line, "LPV"),
-                        extract_attr(line, "RPV"),
-                    ]
+                    t       = extract_attr(line, "TIME")
+                    fpogx   = extract_attr(line, "FPOGX")
+                    fpogy   = extract_attr(line, "FPOGY")
+                    fpogv   = extract_attr(line, "FPOGV")   # 1=valid fixation
+                    lpogx   = extract_attr(line, "LPOGX")
+                    lpogy   = extract_attr(line, "LPOGY")
+                    lpogv   = extract_attr(line, "LPOGV")
+                    rpogx   = extract_attr(line, "RPOGX")
+                    rpogy   = extract_attr(line, "RPOGY")
+                    rpogv   = extract_attr(line, "RPOGV")
+
+                    # Best available gaze estimate:
+                    # 1) Valid fixation (FPOGV=1)
+                    # 2) Left eye raw POG
+                    # 3) Right eye raw POG
+                    if fpogv == 1.0 and (fpogx != 0.0 or fpogy != 0.0):
+                        gaze_x, gaze_y = fpogx, fpogy
+                    elif lpogv == 1.0 and (lpogx != 0.0 or lpogy != 0.0):
+                        gaze_x, gaze_y = lpogx, lpogy
+                    elif rpogv == 1.0 and (rpogx != 0.0 or rpogy != 0.0):
+                        gaze_x, gaze_y = rpogx, rpogy
+                    else:
+                        gaze_x, gaze_y = fpogx, fpogy  # save as-is even if 0
+
+                    # Pupil diameter in mm (LPMMV/RPMMV = valid mm value)
+                    # Fall back to LPV/RPV if diameter not in this line
+                    pupil_left  = extract_attr(line, "LPMMV") or extract_attr(line, "LPV")
+                    pupil_right = extract_attr(line, "RPMMV") or extract_attr(line, "RPV")
+
+                    row = [t, fpogx, fpogy, lpogx, lpogy, rpogx, rpogy, pupil_left, pupil_right]
 
                     # Wall-clock ms at the moment this sample arrives — used for
                     # cross-stream alignment (Gazepoint TIME is relative seconds,
@@ -257,12 +276,12 @@ def eye_reader_loop():
                     sid = get_current_session_id()
                     save_eye_data(
                         session_id=sid,
-                        gazepoint_time=row[0],
+                        gazepoint_time=t,
                         wall_time_ms=wall_time_ms,
-                        gaze_x=row[1],
-                        gaze_y=row[2],
-                        pupil_left=row[7],
-                        pupil_right=row[8]
+                        gaze_x=gaze_x,
+                        gaze_y=gaze_y,
+                        pupil_left=pupil_left,
+                        pupil_right=pupil_right
                     )
 
                     eye_outlet.push_sample(row, local_clock())
