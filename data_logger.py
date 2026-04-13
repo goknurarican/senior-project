@@ -22,11 +22,52 @@ lock = threading.Lock()
 # ===============================
 # DATABASE BAĞLANTISI
 # ===============================
-conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
-conn.execute("PRAGMA journal_mode=WAL")   # allow concurrent readers + 1 writer
-conn.execute("PRAGMA busy_timeout=5000")  # wait up to 5s instead of failing instantly
-conn.row_factory = sqlite3.Row   # allows column access by name, not just index
+conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False, timeout=10)
+conn.execute("PRAGMA journal_mode=WAL")    # allow concurrent readers + 1 writer
+conn.execute("PRAGMA busy_timeout=10000")  # wait up to 10s instead of failing instantly
+conn.execute("PRAGMA synchronous=NORMAL")  # faster writes, still safe with WAL
+conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
+
+# ── Eye-data write buffer ─────────────────────────────────────────────────────
+# Gazepoint sends ~150 samples/sec. Writing + committing each sample individually
+# floods the DB and causes SQLITE_BUSY for every other writer (Next.js).
+# We buffer samples and flush in a background thread every 0.5 s (≈75 rows/batch).
+_eye_buffer: list = []
+_eye_buffer_lock = threading.Lock()
+_EYE_BATCH_SIZE = 75   # also flush when this many rows accumulate
+
+
+def _flush_eye_buffer_locked():
+    """Flush _eye_buffer to DB. Caller must hold _eye_buffer_lock."""
+    global _eye_buffer
+    if not _eye_buffer:
+        return
+    rows = _eye_buffer
+    _eye_buffer = []
+    try:
+        with lock:
+            cursor.executemany(
+                """INSERT INTO eye_data
+                   (session_id, gazepoint_time, wall_time_ms,
+                    gaze_x, gaze_y, pupil_left, pupil_right)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+            conn.commit()
+    except Exception as exc:
+        print(f"[ERROR] eye flush: {exc}")
+
+
+def _eye_flush_thread():
+    """Background thread: flush buffered eye samples every 0.5 s."""
+    while True:
+        time.sleep(0.5)
+        with _eye_buffer_lock:
+            _flush_eye_buffer_locked()
+
+
+threading.Thread(target=_eye_flush_thread, daemon=True).start()
 
 # ===============================
 # TABLOLAR
@@ -133,38 +174,15 @@ def save_event(data):
 # ===============================
 def save_eye_data(session_id, gazepoint_time, wall_time_ms, gaze_x, gaze_y, pupil_left, pupil_right):
     """
-    gazepoint_time : float  — Gazepoint's own TIME field (seconds, relative clock)
-    wall_time_ms   : int    — Python time.time()*1000 at sample receipt (Unix ms,
-                              same scale as JS scenario timestamps → used for alignment)
+    Buffer a single eye sample. The background flush thread commits to DB every 0.5 s.
+    gazepoint_time : float — Gazepoint TIME field (relative seconds)
+    wall_time_ms   : int   — Unix ms at sample receipt (used for cross-stream alignment)
     """
-    try:
-        with lock:
-            cursor.execute(
-                """
-                INSERT INTO eye_data (
-                    session_id,
-                    gazepoint_time,
-                    wall_time_ms,
-                    gaze_x,
-                    gaze_y,
-                    pupil_left,
-                    pupil_right
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    session_id,
-                    gazepoint_time,
-                    wall_time_ms,
-                    gaze_x,
-                    gaze_y,
-                    pupil_left,
-                    pupil_right
-                )
-            )
-            conn.commit()
-    except Exception as e:
-        print(f"[ERROR] save_eye_data: {e}")
+    with _eye_buffer_lock:
+        _eye_buffer.append((session_id, gazepoint_time, wall_time_ms,
+                            gaze_x, gaze_y, pupil_left, pupil_right))
+        if len(_eye_buffer) >= _EYE_BATCH_SIZE:
+            _flush_eye_buffer_locked()
 
 
 # ===============================
