@@ -316,6 +316,7 @@ def check_packaged_files(user_id, user_name, grp):
         "platform/session_info.json":   "Session bilgisi",
         "eye/eye_data_db.csv":          "Göz verisi (DB)",
         "eeg/marker_legend.csv":        "EEG marker efsanesi",
+        "eeg/eeg_markers.csv":          "EEG marker kaydı (session)",
     }
 
     for rel, label in checks.items():

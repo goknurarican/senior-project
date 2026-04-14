@@ -823,6 +823,47 @@ def package_subject(user_id, eeg_dir=None, gaze_file=None):
     # Always write the marker legend so the researcher knows S 11 = slow_image etc.
     write_marker_legend(eegdir)
 
+    # ── EEG markers from lsl_events (session-specific, Drive-friendly) ─────
+    # This is the primary record linking BrainVision TTL values to scenario
+    # details.  Unlike marker_legend.csv (which is a static mapping table),
+    # this file has one row per marker FIRED during this participant's session.
+    if data["session_id"] not in (None, "unknown"):
+        try:
+            c = get_db().cursor()
+            c.execute("""
+                SELECT wall_time_ms, scenario_name, scenario_type,
+                       eeg_marker, phase, page_url
+                FROM lsl_events
+                WHERE session_id=?
+                ORDER BY wall_time_ms ASC
+            """, (data["session_id"],))
+            lsl_rows = c.fetchall()
+            if lsl_rows:
+                eeg_markers_path = eegdir / "eeg_markers.csv"
+                with open(eeg_markers_path, "w", newline="", encoding="utf-8") as _f:
+                    _w = csv.writer(_f)
+                    _w.writerow([
+                        "wall_time_ms", "bv_label",
+                        "eeg_marker", "scenario_name", "scenario_type",
+                        "phase", "page_url",
+                    ])
+                    for r in lsl_rows:
+                        _w.writerow([
+                            r["wall_time_ms"],
+                            f"S {r['eeg_marker']}" if r["eeg_marker"] else "",
+                            r["eeg_marker"],
+                            r["scenario_name"],
+                            r["scenario_type"],
+                            r["phase"],
+                            r["page_url"],
+                        ])
+                print(f"    EEG markers CSV: {len(lsl_rows)} rows → eeg_markers.csv")
+                meta["eeg_marker_rows"] = len(lsl_rows)
+            else:
+                print(f"    EEG markers CSV: no lsl_events found for this session")
+        except Exception as e:
+            print(f"    [WARN] eeg_markers.csv export failed: {e}")
+
     # ── Final metadata ─────────────────────────────────────────────────────
     meta["eeg_found"]  = len(eeg_files)
     meta["eye_found"]  = gf is not None and gf.exists() if gf else False
