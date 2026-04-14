@@ -91,20 +91,31 @@ EEG_DIRS = [
 # Used to write the marker legend so BrainVision Analyzer users know
 # what S 11, S 12 … mean.
 SCENARIO_MARKER_MAP = {
-    "slow_image":       11,
-    "broken_image":     12,
-    "skeleton_prolong": 13,
-    "search_irrelevant":14,
-    "button_delay":     15,
-    "first_click_miss": 16,
-    "feedback_late":    17,
-    "network_jitter":   18,
-    "overlay_blocking": 19,
-    "price_change":     20,
-    "coupon_min_spend": 21,
-    "coupon_expired":   22,
-    "facet_reset_once": 23,
-    "sort_reset":       24,
+    # Session / phase markers
+    "control_start":  1,
+    "variant_start":  2,
+    "experiment_end": 99,
+    # UX frustration scenarios
+    "slow_image":        11,
+    "broken_image":      12,
+    "skeleton_prolong":  13,
+    "search_irrelevant": 14,
+    "button_delay":      15,
+    "first_click_miss":  16,
+    "feedback_late":     17,
+    "network_jitter":    18,
+    "overlay_blocking":  19,
+    "price_change":      20,
+    "coupon_min_spend":  21,
+    "coupon_expired":    22,
+    "facet_reset_once":  23,
+    "sort_reset":        24,
+    # Task-level user action markers
+    "add_to_cart":       30,
+    "checkout_start":    31,
+    "purchase_complete":  32,
+    "search_performed":  33,
+    "product_viewed":    34,
 }
 
 
@@ -192,11 +203,36 @@ def write_marker_legend(eegdir: Path):
     """
     rows = sorted(SCENARIO_MARKER_MAP.items(), key=lambda x: x[1])
 
+    DESCRIPTIONS = {
+        1:  "Control phase start — participant logged in, eye tracking live",
+        2:  "Variant phase start — UX frustration scenarios now active",
+        99: "Experiment end — session complete",
+        11: "Slow image load (3-5 s delay on product images)",
+        12: "Broken image / 404 asset",
+        13: "Skeleton prolonged (loading skeleton stays > 3 s)",
+        14: "Search results shuffled to irrelevant order",
+        15: "Button unresponsive / delayed (4 s)",
+        16: "First click misses target (button jumps away)",
+        17: "Feedback / alert delivered late (1.2 s delay)",
+        18: "Network jitter — all API calls throttled",
+        19: "Overlay blocking — modal covers content",
+        20: "Price change warning in cart",
+        21: "Coupon rejected — minimum spend not met",
+        22: "Coupon rejected — code expired",
+        23: "Filter / facet reset unexpectedly",
+        24: "Sort order reset unexpectedly",
+        30: "User added a product to cart",
+        31: "User navigated to checkout page",
+        32: "Order placed successfully",
+        33: "User submitted a search query",
+        34: "User opened a product detail page",
+    }
+
     with open(eegdir / "marker_legend.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["eeg_marker_value", "bv_label", "scenario_name"])
+        w.writerow(["eeg_marker_value", "bv_label", "scenario_name", "description"])
         for name, val in rows:
-            w.writerow([val, f"S {val}", name])
+            w.writerow([val, f"S {val}", name, DESCRIPTIONS.get(val, "")])
 
     json.dump(
         {str(v): k for k, v in SCENARIO_MARKER_MAP.items()},
@@ -212,31 +248,78 @@ def write_marker_legend(eegdir: Path):
 
 def export_eye_db(session_id, output_path: Path):
     """
-    Export eye_data rows for this session from our SQLite DB to a CSV.
-
-    This is NOT a replacement for the native Gazepoint CSV (which has many
-    more columns and is what Gazepoint Analysis software reads).  This file
-    is for alignment in our Python analysis pipeline — it uses wall_time_ms
-    (Unix ms) so it can be directly compared to scenario timestamps.
+    Export eye_data rows for this session from SQLite to CSV.
 
     Columns:
-        wall_time_ms   — Unix ms when Python received the sample (alignment key)
-        gazepoint_time — Gazepoint's own TIME field (relative seconds)
-        gaze_x / gaze_y           — fixation POG, 0–1 normalized
-        pupil_left / pupil_right  — pupil diameter in mm
+        wall_time_ms            Unix ms — alignment key across all streams
+        gazepoint_time          Gazepoint relative seconds
+        gaze_x / gaze_y         Best-available POG, 0–1 normalised
+        pupil_left / pupil_right Pupil diameter mm (LPMMV/RPMMV)
+        bpogv                   1 = best-POG valid (not a blink / lost-tracking)
+        fpogv                   1 = fixation-POG valid
+        phase                   "control" or variant name (from phase_change marker)
+        active_scenario         scenario_type active at this sample (within 3 s of trigger),
+                                "" if no scenario is active
     """
     conn = get_db()
     c = conn.cursor()
+
+    # ── Phase transition time ─────────────────────────────────────────────
+    phase_change_ms = None
+    phase_name      = "variant"
     try:
         c.execute("""
-            SELECT wall_time_ms, gazepoint_time, gaze_x, gaze_y, pupil_left, pupil_right
+            SELECT wall_time_ms, phase FROM lsl_events
+            WHERE session_id=? AND scenario_type='variant_start'
+            ORDER BY wall_time_ms ASC LIMIT 1
+        """, (session_id,))
+        pc = c.fetchone()
+        if pc and pc["wall_time_ms"]:
+            phase_change_ms = pc["wall_time_ms"]
+            phase_name      = pc["phase"] or "variant"
+    except Exception:
+        pass
+
+    # ── Scenario trigger windows ──────────────────────────────────────────
+    # For each eye sample, we want to know if a scenario was triggered
+    # in the [0, SCENARIO_EFFECT_MS] window before this sample.
+    SCENARIO_EFFECT_MS = 3000
+    scenario_triggers = []
+    try:
+        c.execute("""
+            SELECT scenario_type, wall_time_ms FROM lsl_events
+            WHERE session_id=?
+              AND scenario_type NOT IN ('variant_start','control_start','experiment_end')
+              AND scenario_type IS NOT NULL
+              AND wall_time_ms IS NOT NULL
+            ORDER BY wall_time_ms ASC
+        """, (session_id,))
+        scenario_triggers = [(r["scenario_type"], r["wall_time_ms"])
+                             for r in c.fetchall()]
+    except Exception:
+        pass
+
+    def active_scenario_at(t_ms):
+        """Return the scenario_type active at t_ms, or '' if none."""
+        for stype, trigger_ms in scenario_triggers:
+            if trigger_ms <= t_ms <= trigger_ms + SCENARIO_EFFECT_MS:
+                return stype
+        return ""
+
+    # ── Eye rows ──────────────────────────────────────────────────────────
+    try:
+        c.execute("""
+            SELECT wall_time_ms, gazepoint_time, gaze_x, gaze_y,
+                   pupil_left, pupil_right,
+                   COALESCE(bpogv, 0) AS bpogv,
+                   COALESCE(fpogv, 0) AS fpogv
             FROM eye_data
             WHERE session_id=?
             ORDER BY wall_time_ms ASC
         """, (session_id,))
         rows = c.fetchall()
     except Exception as e:
-        print(f"    [WARN] eye_data table not readable ({e}) — skipped.")
+        print(f"    [WARN] eye_data not readable ({e}) — skipped.")
         conn.close()
         return 0
     conn.close()
@@ -245,16 +328,34 @@ def export_eye_db(session_id, output_path: Path):
         print(f"    Eye DB: 0 rows for session {session_id}")
         return 0
 
+    control_count = variant_count = 0
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["wall_time_ms", "gazepoint_time", "gaze_x", "gaze_y",
-                    "pupil_left", "pupil_right"])
+                    "pupil_left", "pupil_right", "bpogv", "fpogv",
+                    "phase", "active_scenario"])
         for r in rows:
-            w.writerow([r["wall_time_ms"], r["gazepoint_time"],
-                        r["gaze_x"], r["gaze_y"],
-                        r["pupil_left"], r["pupil_right"]])
+            t = r["wall_time_ms"]
+            if phase_change_ms and t:
+                phase = "control" if t < phase_change_ms else phase_name
+            else:
+                phase = "unknown"
+            if phase == "control":
+                control_count += 1
+            else:
+                variant_count += 1
+            w.writerow([
+                t, r["gazepoint_time"],
+                r["gaze_x"], r["gaze_y"],
+                r["pupil_left"], r["pupil_right"],
+                r["bpogv"], r["fpogv"],
+                phase, active_scenario_at(t) if t else "",
+            ])
 
-    print(f"    Eye DB export: {output_path.name} ({len(rows)} rows)")
+    valid_count = sum(1 for r in rows if r["bpogv"])
+    print(f"    Eye DB: {output_path.name} — {len(rows)} rows "
+          f"[control={control_count}, {phase_name}={variant_count}, "
+          f"bpogv_valid={valid_count}/{len(rows)}]")
     return len(rows)
 
 
@@ -339,6 +440,280 @@ def save_csv(rows, path, cols=None):
 
 
 # ---------------------------------------------------------------------------
+# Mouse trajectory exploder
+# ---------------------------------------------------------------------------
+
+def _mouse_batch_features(pts):
+    """
+    Compute aggregate ML features for one trajectory batch (list of point dicts).
+
+    Returns a dict with:
+        n_points        number of samples in batch
+        x_flips         horizontal direction reversals (left→right→left counts)
+        y_flips         vertical direction reversals
+        auc_px          area between actual path and straight first→last line (px)
+        idle_ratio      fraction of samples with velocity < 0.05 px/ms
+        mean_velocity   mean px/ms
+        max_velocity    max px/ms
+        path_length_px  total Euclidean distance travelled
+    """
+    import math as _math
+    if len(pts) < 2:
+        return {"n_points": len(pts), "x_flips": 0, "y_flips": 0, "auc_px": 0.0,
+                "idle_ratio": 0.0, "mean_velocity": 0.0, "max_velocity": 0.0,
+                "path_length_px": 0.0}
+
+    xs, ys, vs = [], [], []
+    path_len = 0.0
+    for p in pts:
+        try:
+            xs.append(float(p["x"])); ys.append(float(p["y"]))
+            v = float(p.get("velocity") or 0)
+            vs.append(v)
+        except (TypeError, ValueError):
+            continue
+
+    if not xs:
+        return {"n_points": 0, "x_flips": 0, "y_flips": 0, "auc_px": 0.0,
+                "idle_ratio": 0.0, "mean_velocity": 0.0, "max_velocity": 0.0,
+                "path_length_px": 0.0}
+
+    # X-Flips and Y-Flips
+    x_flips = sum(1 for i in range(1, len(xs)-1)
+                  if (xs[i]-xs[i-1]) * (xs[i+1]-xs[i]) < 0)
+    y_flips = sum(1 for i in range(1, len(ys)-1)
+                  if (ys[i]-ys[i-1]) * (ys[i+1]-ys[i]) < 0)
+
+    # Path length
+    for i in range(1, len(xs)):
+        path_len += _math.sqrt((xs[i]-xs[i-1])**2 + (ys[i]-ys[i-1])**2)
+
+    # AUC — sum of perpendicular distances from each point to first→last line
+    x0, y0, x1, y1 = xs[0], ys[0], xs[-1], ys[-1]
+    dx, dy = x1 - x0, y1 - y0
+    seg_len = _math.sqrt(dx*dx + dy*dy)
+    auc = 0.0
+    if seg_len > 0:
+        for px, py in zip(xs[1:-1], ys[1:-1]):
+            auc += abs((px-x0)*dy - (py-y0)*dx) / seg_len
+    else:
+        for px, py in zip(xs, ys):
+            auc += _math.sqrt((px-x0)**2 + (py-y0)**2)
+
+    IDLE_THRESH = 0.05  # px/ms
+    idle_count  = sum(1 for v in vs if v < IDLE_THRESH)
+
+    return {
+        "n_points":       len(xs),
+        "x_flips":        x_flips,
+        "y_flips":        y_flips,
+        "auc_px":         round(auc, 2),
+        "idle_ratio":     round(idle_count / len(vs), 4) if vs else 0.0,
+        "mean_velocity":  round(sum(vs)/len(vs), 6) if vs else 0.0,
+        "max_velocity":   round(max(vs), 6) if vs else 0.0,
+        "path_length_px": round(path_len, 2),
+    }
+
+
+def export_mouse_points(trajectory_events, click_events, output_dir: Path):
+    """
+    Explode batched mouse trajectory events into ML-ready feature rows.
+
+    Trajectory CSV columns (mouse_trajectory_points.csv):
+      wall_time_ms   Unix ms — aligns with eye_data.wall_time_ms and lsl_events.wall_time_ms
+      x, y           viewport pixels (clientX/clientY)
+      x_norm, y_norm 0–1 normalised (same coordinate space as Gazepoint gaze_x/gaze_y)
+      scroll_y       window.scrollY — absolute page position
+      velocity       px/ms between this and previous point (erratic movement indicator)
+      acceleration   Δvelocity/Δt — sudden stops/bursts
+      page_url
+      session_id
+
+    Click CSV columns (mouse_clicks_flat.csv):
+      wall_time_ms
+      x, y, x_norm, y_norm, scroll_y
+      button         0=left 1=middle 2=right
+      is_rage_click  1 if ≥2 left clicks within 500 ms and 60 px of same spot
+      target, class_name
+      page_url, session_id
+    """
+    import json as _json
+    import math
+
+    # ── Trajectory points ──────────────────────────────────────────────────
+    points = []
+    for ev in trajectory_events:
+        try:
+            ed = _json.loads(ev.get("event_data") or "{}")
+            path = ed.get("path", [])
+        except Exception:
+            continue
+        page     = ev.get("page_url", "")
+        sid      = ev.get("session_id", "")
+        # experiment_group == phase for this event ("control" or "variant_*")
+        phase    = ev.get("experiment_group") or "control"
+        screen_w = ed.get("screen_w") or None
+        screen_h = ed.get("screen_h") or None
+        for pt in path:
+            points.append({
+                "wall_time_ms": pt.get("t", ""),
+                "x":            pt.get("x", ""),
+                "y":            pt.get("y", ""),
+                "x_norm":       round(pt["x"] / screen_w, 6) if screen_w and pt.get("x") != "" else "",
+                "y_norm":       round(pt["y"] / screen_h, 6) if screen_h and pt.get("y") != "" else "",
+                "scroll_y":     pt.get("sy", ""),
+                "velocity":     "",       # filled in next pass
+                "acceleration": "",
+                "phase":        phase,
+                "page_url":     page,
+                "session_id":   sid,
+            })
+
+    # Compute velocity and acceleration between consecutive points
+    for i, pt in enumerate(points):
+        if i == 0:
+            pt["velocity"] = 0.0
+            pt["acceleration"] = 0.0
+            continue
+        prev = points[i - 1]
+        try:
+            dx = float(pt["x"]) - float(prev["x"])
+            dy = float(pt["y"]) - float(prev["y"])
+            dt = float(pt["wall_time_ms"]) - float(prev["wall_time_ms"])
+            v  = math.sqrt(dx*dx + dy*dy) / dt if dt > 0 else 0.0
+            pt["velocity"] = round(v, 6)
+            prev_v = float(prev["velocity"]) if prev["velocity"] != "" else 0.0
+            pt["acceleration"] = round((v - prev_v) / dt, 8) if dt > 0 else 0.0
+        except (TypeError, ValueError):
+            pt["velocity"] = ""
+            pt["acceleration"] = ""
+
+    TRAJ_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
+                 "velocity", "acceleration", "phase", "page_url", "session_id"]
+    if points:
+        with open(output_dir / "mouse_trajectory_points.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=TRAJ_COLS)
+            w.writeheader()
+            w.writerows(points)
+        print(f"    Mouse trajectory points: {len(points)} rows "
+              f"(velocity + norm included)")
+    else:
+        print(f"    Mouse trajectory points: 0 rows")
+
+    # ── Per-batch trajectory summary (X-Flips, AUC, Idle ratio) ──────────
+    summary_rows = []
+    for ev in trajectory_events:
+        try:
+            ed = _json.loads(ev.get("event_data") or "{}")
+            path = ed.get("path", [])
+        except Exception:
+            continue
+        if not path:
+            continue
+        feats = _mouse_batch_features(path)
+        sw = ed.get("screen_w") or None
+        sh = ed.get("screen_h") or None
+        summary_rows.append({
+            "wall_time_ms_start": path[0].get("t", ""),
+            "wall_time_ms_end":   path[-1].get("t", ""),
+            "phase":              ev.get("experiment_group") or "control",
+            "page_url":           ev.get("page_url", ""),
+            "screen_w":           sw,
+            "screen_h":           sh,
+            "dpr":                ed.get("dpr", ""),
+            **feats,
+        })
+
+    if summary_rows:
+        SUMM_COLS = ["wall_time_ms_start", "wall_time_ms_end", "phase", "page_url",
+                     "screen_w", "screen_h", "dpr",
+                     "n_points", "x_flips", "y_flips", "auc_px",
+                     "idle_ratio", "mean_velocity", "max_velocity", "path_length_px"]
+        with open(output_dir / "mouse_trajectory_summary.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=SUMM_COLS)
+            w.writeheader()
+            w.writerows(summary_rows)
+        print(f"    Mouse trajectory summary: {len(summary_rows)} batches "
+              f"(X-Flips, AUC, Idle included)")
+
+    # ── Clicks flat ────────────────────────────────────────────────────────
+    # Rage click: left-button click within 500 ms AND 60 px of a previous click
+    RAGE_WINDOW_MS = 500
+    RAGE_RADIUS_PX = 60
+
+    raw_clicks = []
+    for ev in click_events:
+        try:
+            ed = _json.loads(ev.get("event_data") or "{}")
+        except Exception:
+            ed = {}
+        try:
+            sw = ed.get("screen_w") or None
+            sh = ed.get("screen_h") or None
+            cx = ed.get("x", "")
+            cy = ed.get("y", "")
+        except Exception:
+            sw = sh = None; cx = cy = ""
+        raw_clicks.append({
+            "wall_time_ms": ev.get("timestamp", ""),
+            "x":            cx,
+            "y":            cy,
+            "x_norm":       round(float(cx) / sw, 6) if sw and cx != "" else "",
+            "y_norm":       round(float(cy) / sh, 6) if sh and cy != "" else "",
+            "scroll_y":     ed.get("sy", ""),
+            "button":       ed.get("button", 0),
+            "is_rage_click": 0,
+            "phase":        ev.get("experiment_group") or "control",
+            "target":       ed.get("target", ""),
+            "class_name":   ed.get("className", ""),
+            "page_url":     ev.get("page_url", ""),
+            "session_id":   ev.get("session_id", ""),
+        })
+
+    for i, ck in enumerate(raw_clicks):
+        if ck["button"] != 0:
+            continue
+        try:
+            t1 = float(ck["wall_time_ms"]); x1 = float(ck["x"]); y1 = float(ck["y"])
+        except (TypeError, ValueError):
+            continue
+        for prev in raw_clicks[max(0, i-10):i]:
+            if prev["button"] != 0:
+                continue
+            try:
+                t0 = float(prev["wall_time_ms"]); x0 = float(prev["x"]); y0 = float(prev["y"])
+            except (TypeError, ValueError):
+                continue
+            if (t1 - t0) <= RAGE_WINDOW_MS and math.sqrt((x1-x0)**2 + (y1-y0)**2) <= RAGE_RADIUS_PX:
+                ck["is_rage_click"] = 1
+                break
+
+    CLICK_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
+                  "button", "is_rage_click", "phase", "target", "class_name",
+                  "page_url", "session_id"]
+    if raw_clicks:
+        with open(output_dir / "mouse_clicks_flat.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=CLICK_COLS)
+            w.writeheader()
+            w.writerows(raw_clicks)
+        rage = sum(1 for c in raw_clicks if c["is_rage_click"])
+        print(f"    Mouse clicks (flat): {len(raw_clicks)} rows "
+              f"({rage} rage clicks detected)")
+
+    # ── Drag events ───────────────────────────────────────────────────────
+    drag_events = [e for e in trajectory_events + click_events
+                   if e.get("event_type") == "mouse_drag"]
+    # Note: drag events are logged via logEvent so they appear in all_events,
+    # not in trajectory_events. Re-fetch from the original events list if needed.
+    # The caller (package_subject) filters these separately — handled below.
+
+    return len(points), len(raw_clicks)
+
+
+# ---------------------------------------------------------------------------
 # Main packaging function
 # ---------------------------------------------------------------------------
 
@@ -371,6 +746,9 @@ def package_subject(user_id, eeg_dir=None, gaze_file=None):
     for k in ["all_events", "mouse_trajectories", "mouse_clicks", "scenarios", "page_views"]:
         if data[k]:
             print(f"    {k}: {len(data[k])} rows")
+
+    # Exploded mouse files (one row per point, wall_time_ms aligned)
+    export_mouse_points(data["mouse_trajectories"], data["mouse_clicks"], pdir)
 
     meta = {
         "user_id":       user_id,

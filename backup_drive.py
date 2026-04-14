@@ -167,3 +167,49 @@ def backup_subject(subject_folder: Path, log=None) -> bool:
         if log:
             log(f"[BACKUP] HATA: {exc}\n")
         return False
+# ==========================================
+# TRIGGER LOG YEDEKLEME — yardımcı fonksiyonlar
+# ==========================================
+ 
+def _find_eeg_folder_id(service, subject_folder_drive_id: str, log=None) -> str | None:
+    """
+    Drive'daki subject klasörü altında adında 'eeg' geçen alt klasörü bulur.
+    Bulamazsa None döner.
+    """
+    q = (f"mimeType='application/vnd.google-apps.folder' "
+         f"and '{subject_folder_drive_id}' in parents "
+         f"and trashed=false")
+    results = service.files().list(q=q, fields="files(id, name)").execute()
+    for f in results.get("files", []):
+        if "eeg" in f["name"].lower():
+            if log:
+                log(f"[BACKUP] EEG klasörü Drive'da bulundu: {f['name']}\n")
+            return f["id"]
+    return None
+ 
+ 
+def _backup_trigger_log(service, subject_folder_drive_id: str, log=None) -> None:
+    """
+    En güncel trigger_log_*.txt dosyasını bulur ve Drive'daki EEG klasörüne yükler.
+    EEG klasörü yoksa subject kök klasörüne yükler ve uyarır.
+    """
+    log_files = sorted(SCRIPT_DIR.glob("trigger_log_*.txt"))
+    if not log_files:
+        if log:
+            log("[BACKUP] trigger_log_*.txt bulunamadı — log yüklemesi atlandı.\n")
+        return
+ 
+    latest_log = log_files[-1]  # timestamp'e göre sıralı, en son = en güncel
+ 
+    eeg_folder_id = _find_eeg_folder_id(service, subject_folder_drive_id, log)
+ 
+    if eeg_folder_id:
+        if log:
+            log(f"[BACKUP] {latest_log.name} → EEG klasörüne yükleniyor...\n")
+        _upload_file(service, latest_log, eeg_folder_id, log)
+    else:
+        if log:
+            log(f"[BACKUP] UYARI: Drive'da EEG alt klasörü bulunamadı. "
+                f"{latest_log.name} subject kök klasörüne yüklendi.\n")
+        _upload_file(service, latest_log, subject_folder_drive_id, log)
+ 
