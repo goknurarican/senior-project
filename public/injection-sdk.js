@@ -213,18 +213,7 @@
 
       console.log("⚡️ ÇALIŞIYOR:", scenario.name);
 
-      // Basit marker
-      try {
-        window.originalFetch("http://127.0.0.1:5001/send_negative_trigger", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scenario: scenario.name }),
-        }).catch(() => {});
-      } catch (err) {
-        console.warn("Python marker sunucusuna ulaşılamadı.");
-      }
-
-      // LSL / detaylı marker
+      // EEG + LSL + eye tracker marker (tam payload)
       try {
         window.originalFetch("http://127.0.0.1:5001/send_negative_trigger", {
           method: "POST",
