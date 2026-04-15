@@ -515,7 +515,8 @@ def _mouse_batch_features(pts):
     }
 
 
-def export_mouse_points(trajectory_events, click_events, output_dir: Path):
+def export_mouse_points(trajectory_events, click_events, output_dir: Path,
+                        session_id: str = None):
     """
     Explode batched mouse trajectory events into ML-ready feature rows.
 
@@ -526,6 +527,7 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
       scroll_y       window.scrollY — absolute page position
       velocity       px/ms between this and previous point (erratic movement indicator)
       acceleration   Δvelocity/Δt — sudden stops/bursts
+      active_scenario scenario_type active at this sample (within 3 s of trigger), "" if none
       page_url
       session_id
 
@@ -534,11 +536,40 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
       x, y, x_norm, y_norm, scroll_y
       button         0=left 1=middle 2=right
       is_rage_click  1 if ≥2 left clicks within 500 ms and 60 px of same spot
+      active_scenario
       target, class_name
       page_url, session_id
     """
     import json as _json
     import math
+
+    # ── Scenario trigger lookup (same logic as export_eye_db) ─────────────
+    SCENARIO_EFFECT_MS = 3000
+    _scenario_triggers = []   # list of (scenario_type, trigger_ms)
+    if session_id and session_id not in (None, "unknown", ""):
+        try:
+            _c = get_db().cursor()
+            _c.execute("""
+                SELECT scenario_type, wall_time_ms FROM lsl_events
+                WHERE session_id=?
+                  AND scenario_type NOT IN ('variant_start','control_start','experiment_end')
+                  AND scenario_type IS NOT NULL
+                  AND wall_time_ms IS NOT NULL
+                ORDER BY wall_time_ms ASC
+            """, (session_id,))
+            _scenario_triggers = [
+                (r["scenario_type"], r["wall_time_ms"]) for r in _c.fetchall()
+            ]
+        except Exception:
+            pass
+
+    def _active_scenario_at(t_ms):
+        if not t_ms:
+            return ""
+        for stype, trigger_ms in _scenario_triggers:
+            if trigger_ms <= t_ms <= trigger_ms + SCENARIO_EFFECT_MS:
+                return stype
+        return ""
 
     # ── Trajectory points ──────────────────────────────────────────────────
     points = []
@@ -555,18 +586,20 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
         screen_w = ed.get("screen_w") or None
         screen_h = ed.get("screen_h") or None
         for pt in path:
+            t_ms = pt.get("t", "")
             points.append({
-                "wall_time_ms": pt.get("t", ""),
-                "x":            pt.get("x", ""),
-                "y":            pt.get("y", ""),
-                "x_norm":       round(pt["x"] / screen_w, 6) if screen_w and pt.get("x") != "" else "",
-                "y_norm":       round(pt["y"] / screen_h, 6) if screen_h and pt.get("y") != "" else "",
-                "scroll_y":     pt.get("sy", ""),
-                "velocity":     "",       # filled in next pass
-                "acceleration": "",
-                "phase":        phase,
-                "page_url":     page,
-                "session_id":   sid,
+                "wall_time_ms":  t_ms,
+                "x":             pt.get("x", ""),
+                "y":             pt.get("y", ""),
+                "x_norm":        round(pt["x"] / screen_w, 6) if screen_w and pt.get("x") != "" else "",
+                "y_norm":        round(pt["y"] / screen_h, 6) if screen_h and pt.get("y") != "" else "",
+                "scroll_y":      pt.get("sy", ""),
+                "velocity":      "",       # filled in next pass
+                "acceleration":  "",
+                "active_scenario": _active_scenario_at(t_ms),
+                "phase":         phase,
+                "page_url":      page,
+                "session_id":    sid,
             })
 
     # Compute velocity and acceleration between consecutive points
@@ -589,7 +622,8 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             pt["acceleration"] = ""
 
     TRAJ_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
-                 "velocity", "acceleration", "phase", "page_url", "session_id"]
+                 "velocity", "acceleration", "active_scenario", "phase",
+                 "page_url", "session_id"]
     if points:
         with open(output_dir / "mouse_trajectory_points.csv", "w",
                   newline="", encoding="utf-8") as f:
@@ -614,10 +648,20 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
         feats = _mouse_batch_features(path)
         sw = ed.get("screen_w") or None
         sh = ed.get("screen_h") or None
+        t_start = path[0].get("t", "")
+        t_end   = path[-1].get("t", "")
+        # Label batch with whichever scenario was active at any point in it
+        batch_scenario = ""
+        if t_start and t_end:
+            for stype, trigger_ms in _scenario_triggers:
+                if trigger_ms <= t_end and trigger_ms + SCENARIO_EFFECT_MS >= t_start:
+                    batch_scenario = stype
+                    break
         summary_rows.append({
-            "wall_time_ms_start": path[0].get("t", ""),
-            "wall_time_ms_end":   path[-1].get("t", ""),
+            "wall_time_ms_start": t_start,
+            "wall_time_ms_end":   t_end,
             "phase":              ev.get("experiment_group") or "control",
+            "active_scenario":    batch_scenario,
             "page_url":           ev.get("page_url", ""),
             "screen_w":           sw,
             "screen_h":           sh,
@@ -626,7 +670,8 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
         })
 
     if summary_rows:
-        SUMM_COLS = ["wall_time_ms_start", "wall_time_ms_end", "phase", "page_url",
+        SUMM_COLS = ["wall_time_ms_start", "wall_time_ms_end", "phase",
+                     "active_scenario", "page_url",
                      "screen_w", "screen_h", "dpr",
                      "n_points", "x_flips", "y_flips", "auc_px",
                      "idle_ratio", "mean_velocity", "max_velocity", "path_length_px"]
@@ -656,20 +701,22 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
             cy = ed.get("y", "")
         except Exception:
             sw = sh = None; cx = cy = ""
+        t_ms = ev.get("timestamp", "")
         raw_clicks.append({
-            "wall_time_ms": ev.get("timestamp", ""),
-            "x":            cx,
-            "y":            cy,
-            "x_norm":       round(float(cx) / sw, 6) if sw and cx != "" else "",
-            "y_norm":       round(float(cy) / sh, 6) if sh and cy != "" else "",
-            "scroll_y":     ed.get("sy", ""),
-            "button":       ed.get("button", 0),
-            "is_rage_click": 0,
-            "phase":        ev.get("experiment_group") or "control",
-            "target":       ed.get("target", ""),
-            "class_name":   ed.get("className", ""),
-            "page_url":     ev.get("page_url", ""),
-            "session_id":   ev.get("session_id", ""),
+            "wall_time_ms":   t_ms,
+            "x":              cx,
+            "y":              cy,
+            "x_norm":         round(float(cx) / sw, 6) if sw and cx != "" else "",
+            "y_norm":         round(float(cy) / sh, 6) if sh and cy != "" else "",
+            "scroll_y":       ed.get("sy", ""),
+            "button":         ed.get("button", 0),
+            "is_rage_click":  0,
+            "active_scenario": _active_scenario_at(t_ms),
+            "phase":          ev.get("experiment_group") or "control",
+            "target":         ed.get("target", ""),
+            "class_name":     ed.get("className", ""),
+            "page_url":       ev.get("page_url", ""),
+            "session_id":     ev.get("session_id", ""),
         })
 
     for i, ck in enumerate(raw_clicks):
@@ -691,8 +738,8 @@ def export_mouse_points(trajectory_events, click_events, output_dir: Path):
                 break
 
     CLICK_COLS = ["wall_time_ms", "x", "y", "x_norm", "y_norm", "scroll_y",
-                  "button", "is_rage_click", "phase", "target", "class_name",
-                  "page_url", "session_id"]
+                  "button", "is_rage_click", "active_scenario", "phase",
+                  "target", "class_name", "page_url", "session_id"]
     if raw_clicks:
         with open(output_dir / "mouse_clicks_flat.csv", "w",
                   newline="", encoding="utf-8") as f:
@@ -748,7 +795,8 @@ def package_subject(user_id, eeg_dir=None, gaze_file=None):
             print(f"    {k}: {len(data[k])} rows")
 
     # Exploded mouse files (one row per point, wall_time_ms aligned)
-    export_mouse_points(data["mouse_trajectories"], data["mouse_clicks"], pdir)
+    export_mouse_points(data["mouse_trajectories"], data["mouse_clicks"], pdir,
+                        session_id=data["session_id"])
 
     meta = {
         "user_id":       user_id,
