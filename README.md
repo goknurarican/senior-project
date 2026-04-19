@@ -3,6 +3,8 @@
 > **Graduation Thesis** · Industrial Engineering / Management Information Systems  
 > Göknur Arıcan · 2025–2026
 
+![NeuroCart Lab Dashboard](public/preview.png)
+
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?logo=sqlite)](https://sqlite.org)
