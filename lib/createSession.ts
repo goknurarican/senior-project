@@ -54,13 +54,17 @@ export async function createSession(
   setSessionCookie(req, res, sessionId);
 
   // Notify trigger_server so eye data is tagged from this moment on
+  // 3 s timeout — trigger server may still be starting up when first participant logs in
+  const _ac1 = new AbortController();
+  const _t1  = setTimeout(() => _ac1.abort(), 3000);
   try {
     await fetch("http://127.0.0.1:5001/set_session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId }),
+      signal: _ac1.signal,
     });
-  } catch (_) {}
+  } catch (_) {} finally { clearTimeout(_t1); }
 
   console.log(`[Session] User signed up → assigned_variant=${assignedVariant}, phase=control`);
 

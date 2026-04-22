@@ -1,4 +1,3 @@
-// pages/api/events/batch.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import getDb from '../../../lib/db';
 import { getCookie } from 'cookies-next';
@@ -9,44 +8,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const events = req.body;
-  const db = await getDb();
 
-  // 1. Cookie'den User ID'yi çek (Eğer kullanıcı login olmuşsa bu cookie vardır)
+  if (!Array.isArray(events)) {
+    return res.status(400).json({ error: 'Request body must be an array of events' });
+  }
+
+  if (events.length === 0) {
+    return res.status(200).json({ success: true, processed: 0 });
+  }
+
   const userIdRaw = getCookie('user_id', { req, res });
-  let userId = null;
+  let userId: number | null = null;
 
   if (userIdRaw) {
-    try {
-      userId = JSON.parse(userIdRaw as string);
-    } catch (e) {
-      userId = userIdRaw; // JSON değilse direkt string olarak al
-    }
+    const parsed = parseInt(String(userIdRaw), 10);
+    if (!isNaN(parsed)) userId = parsed;
   }
 
   try {
-    // 2. SQL Sorgusunu Hazırla (Performance için prepare kullanılır)
-    // experiment_group ve user_id sütunlarını ekledik
+    const db   = await getDb();
     const stmt = await db.prepare(
-      'INSERT INTO events (session_id, user_id, experiment_group, event_type, event_data, page_url, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO events (session_id, user_id, experiment_group, event_type, event_data, page_url, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
     );
 
     for (const event of events) {
+      if (!event || typeof event !== 'object') continue;
       await stmt.run(
-        event.sessionId,
-        userId,                 // Cookie'den gelen User ID
-        event.experimentGroup,  // SDK'dan gelen o anki grup (control/variant)
-        event.eventType,
-        JSON.stringify(event.eventData),
-        event.pageUrl,
-        event.timestamp
+        event.sessionId       ?? null,
+        userId,
+        event.experimentGroup ?? null,
+        event.eventType       ?? null,
+        event.eventData ? JSON.stringify(event.eventData) : null,
+        event.pageUrl         ?? null,
+        event.timestamp       ?? Date.now(),
       );
     }
 
-    await stmt.finalize(); // İşlemi kapat
-    
-    res.status(200).json({ success: true, processed: events.length });
-  } catch (error) {
-    console.error('Event batch error:', error);
-    res.status(500).json({ error: 'Failed to process events' });
+    await stmt.finalize();
+    return res.status(200).json({ success: true, processed: events.length });
+  } catch (err) {
+    console.error('[events/batch]', err);
+    return res.status(500).json({ error: 'Failed to process events' });
   }
 }

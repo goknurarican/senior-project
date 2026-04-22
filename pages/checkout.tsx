@@ -167,7 +167,29 @@ export default function Checkout() {
     }
 
     await new Promise((r) => setTimeout(r, 1500));
-    alert("Payment successful!");
+
+    // S 32 marker + tüm verileri flush et + deneyi formal olarak kapat
+    if (sdk) {
+      sdk.sendTaskMarker("purchase_complete");  // EEG S 32, LSL, göz takibi
+      await sdk.flushEvents();                  // kalan mouse/event kuyruğunu boşalt
+
+      try {
+        await fetch("/api/experiment/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId:          sdk.sessionId,
+            triggeredScenarios: [...(sdk.triggeredScenarios?.keys() ?? [])],
+            mouseData:          [],
+            eyeData:            [],
+            finishedAt:         Date.now(),
+            pageUrl:            window.location.href,
+          }),
+        });
+      } catch (_) {}
+    }
+
+    alert("Payment successful! Thank you for participating.");
     router.push("/");
   };
 

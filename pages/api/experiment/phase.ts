@@ -38,6 +38,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       [variant, variant, sessionId]
     );
 
+    const _ac1 = new AbortController();
+    const _t1  = setTimeout(() => _ac1.abort(), 3000);
     try {
       await fetch("http://127.0.0.1:5001/send_negative_trigger", {
         method: "POST",
@@ -50,8 +52,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           phase:            variant,
           timestamp:        Date.now()
         }),
+        signal: _ac1.signal,
       });
-    } catch (e) {}
+    } catch (e) {} finally { clearTimeout(_t1); }
 
     return res.json({ status: "success", phase: variant, group: variant });
   }
@@ -59,6 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (action === "end_experiment") {
     await db.run(`UPDATE sessions SET phase = 'completed' WHERE id = ?`, sessionId);
 
+    const _ac2 = new AbortController();
+    const _t2  = setTimeout(() => _ac2.abort(), 3000);
     try {
       await fetch("http://127.0.0.1:5001/send_negative_trigger", {
         method: "POST",
@@ -71,8 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           phase:            "completed",
           timestamp:        Date.now()
         }),
+        signal: _ac2.signal,
       });
-    } catch (e) {}
+    } catch (e) {} finally { clearTimeout(_t2); }
 
     // BİR SONRAKİ DENEK İÇİN SİSTEMİ SIFIRLAMA (LOGOUT)
     // Önceki deneğe ait tüm kimlik ve session verilerini tarayıcıdan siliyoruz.

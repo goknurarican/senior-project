@@ -81,14 +81,17 @@ export default async function handler(
     }
     setSessionCookie(req, res, experiment_session_id);
 
-    // Notify trigger_server so eye data is tagged from this moment on
+    // Notify trigger_server — 3 s timeout so signup never hangs if server is starting
+    const _ac = new AbortController();
+    const _t  = setTimeout(() => _ac.abort(), 3000);
     try {
       await fetch("http://127.0.0.1:5001/set_session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: experiment_session_id }),
+        signal: _ac.signal,
       });
-    } catch (_) {}
+    } catch (_) {} finally { clearTimeout(_t); }
 
     setAuthCookie(req, res, newUser.id, newUser.role);
     clearGuestCookie(req, res);

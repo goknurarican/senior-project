@@ -63,6 +63,35 @@ def _mark_packaged(user_id: int, folder: Path):
         json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
+def _clean_stale_packaged_log():
+    """packaged_log.json'dan artık DB'de bulunmayan user ID'leri temizle.
+
+    DB silinip yeniden oluşturulduğunda eski log kayıtları aynı ID'li yeni
+    katılımcıları 'zaten paketlendi' olarak işaretleyebilir. Bu fonksiyon
+    DB'deki gerçek kullanıcı listesiyle karşılaştırarak bu sorunu önler.
+    """
+    if not DB_PATH.exists():
+        return
+    log = _load_log()
+    if not log:
+        return
+    try:
+        conn = _db()
+        c = conn.cursor()
+        c.execute("SELECT id FROM users WHERE role != 'admin'")
+        valid_ids = {str(row["id"]) for row in c.fetchall()}
+        conn.close()
+        stale = [uid for uid in log if uid not in valid_ids]
+        if stale:
+            for uid in stale:
+                del log[uid]
+            PACKAGED_LOG_PATH.write_text(
+                json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            print(f"  [OK] {len(stale)} eski paket kaydı temizlendi (DB sıfırlanmış).")
+    except Exception as exc:
+        print(f"  [WARN] Paket log temizleme hatası: {exc}")
+
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def _db():
@@ -214,6 +243,7 @@ class LabPanel(tk.Tk):
         self._packaged   = 0      # count packaged this session
 
         self._build_ui()
+        _clean_stale_packaged_log()
         self._refresh()
 
     # ── UI construction ───────────────────────────────────────────────────────

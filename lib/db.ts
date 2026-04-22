@@ -139,21 +139,56 @@ async function initDb(db: any) {
     );
   `);
 
-  // --- ÜRÜN SEED İŞLEMİ (GÜNCELLENDİ) ---
-  // "if count > 0" kontrolünü kaldırdık.
-  // Her zaman temizlik yapıyoruz ki yarış durumu olsa bile temiz başlasın.
+  // --- SCHEMA MİGRASYONLARI (eski DB'lerde eksik kolonları ekle) ---
+  // sessions tablosu — eski sürümlerde user_id ve assigned_variant yoktu
+  for (const sql of [
+    "ALTER TABLE sessions ADD COLUMN user_id INTEGER",
+    "ALTER TABLE sessions ADD COLUMN assigned_variant TEXT",
+    "ALTER TABLE sessions ADD COLUMN phase TEXT DEFAULT 'control'",
+    "ALTER TABLE sessions ADD COLUMN experiment_group TEXT DEFAULT 'control'",
+    "ALTER TABLE sessions ADD COLUMN user_agent TEXT",
+    "ALTER TABLE sessions ADD COLUMN ip TEXT",
+  ]) {
+    try { await db.run(sql); } catch (_) {}
+  }
 
+  // events tablosu — eski sürümlerde user_id, experiment_group, phase yoktu
+  for (const sql of [
+    "ALTER TABLE events ADD COLUMN user_id INTEGER",
+    "ALTER TABLE events ADD COLUMN experiment_group TEXT",
+    "ALTER TABLE events ADD COLUMN phase TEXT",
+    "ALTER TABLE events ADD COLUMN relative_t_ms INTEGER",
+    "ALTER TABLE events ADD COLUMN page_url TEXT",
+  ]) {
+    try { await db.run(sql); } catch (_) {}
+  }
+
+  // products tablosu — eski sürümlerde description ve stock yoktu
+  for (const sql of [
+    "ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 100",
+    "ALTER TABLE products ADD COLUMN description TEXT",
+  ]) {
+    try { await db.run(sql); } catch (_) {}
+  }
+
+  // scenarios tablosu — eski sürümlerde enabled yoktu
+  for (const sql of [
+    "ALTER TABLE scenarios ADD COLUMN enabled INTEGER DEFAULT 1",
+    "ALTER TABLE scenarios ADD COLUMN selector TEXT",
+    "ALTER TABLE scenarios ADD COLUMN params TEXT",
+  ]) {
+    try { await db.run(sql); } catch (_) {}
+  }
+
+  // --- ÜRÜN SEED İŞLEMİ ---
   await db.run("DELETE FROM products");
   await db.run("DELETE FROM cart_items");
-  await db.run("DELETE FROM sqlite_sequence WHERE name='products'");
-
-  // Şimdi temizce ekle
+  try { await db.run("DELETE FROM sqlite_sequence WHERE name='products'"); } catch (_) {}
   await seedProducts(db);
-
 
   // --- SENARYO SEED İŞLEMİ ---
   await db.run("DELETE FROM scenarios");
-  await db.run("DELETE FROM sqlite_sequence WHERE name='scenarios'");
+  try { await db.run("DELETE FROM sqlite_sequence WHERE name='scenarios'"); } catch (_) {}
   await seedScenarios(db);
 
   // --- KULLANICI SEED İŞLEMİ ---
