@@ -1,0 +1,13 @@
+mne>=1.7
+mne-icalabel
+pyprep
+autoreject
+pandas
+numpy
+scipy
+matplotlib
+seaborn
+nilearn
+statsmodels
+pyyaml
+openpyxl

@@ -1,0 +1,293 @@
+# ─── Reproducibility ─────────────────────────────────────
+seed: 42
+
+# ─── Directory structure ─────────────────────────────────
+paths:
+  raw:       data/raw
+  interim:   data/interim
+  processed: data/processed
+  reports:   data/reports
+  logs:      logs
+
+# ─── EEG ─────────────────────────────────────────────────
+eeg:
+  sfreq: 500          # Hz  (SamplingInterval=2000 µs)
+  n_channels: 32      # EEG channels only (35 total – 3 accel)
+  n_total_channels: 35
+
+  # 10-20 system channel order (matches BrainVision export)
+  channels:
+    - Fp1
+    - Fz
+    - F3
+    - F7
+    - FT9
+    - FC5
+    - FC1
+    - C3
+    - T7
+    - TP9
+    - CP5
+    - CP1
+    - Pz
+    - P3
+    - P7
+    - O1
+    - Oz
+    - O2
+    - P4
+    - P8
+    - TP10
+    - CP6
+    - CP2
+    - Cz
+    - C4
+    - T8
+    - FT10
+    - FC6
+    - FC2
+    - F4
+    - F8
+    - Fp2
+
+  accelerometer_channels:
+    - x_dir
+    - y_dir
+    - z_dir
+
+  # Filters
+  highpass:  1.0   # Hz
+  lowpass:  40.0   # Hz
+  notch:    50.0   # Hz – Turkish grid frequency
+
+  # ICA
+  ica_n_components:   20
+  ica_random_state:   42
+  ica_max_iter:      800
+  ica_method:        fastica
+
+# ─── Epoch windows (seconds) ─────────────────────────────
+epochs:
+  erp:
+    tmin: -0.200   # -200 ms
+    tmax:  2.000   # +2000 ms
+  causal:
+    tmin: -0.500   # -500 ms
+    tmax:  3.000   # +3000 ms
+  baseline: [-0.200, 0.000]
+  reject_threshold_uv: 200   # µV – epoch rejection threshold
+
+# ─── Frequency bands (Hz) ────────────────────────────────
+freq_bands:
+  delta: [1,  4]
+  theta: [4,  8]   # cognitive load ↑ → theta ↑
+  alpha: [8, 13]   # relaxation / attention ↓ → alpha ↑
+  beta:  [13, 30]  # active thinking / stress → beta ↑
+  gamma: [30, 40]  # high-level processing → gamma ↑
+
+# ─── Eye tracking ────────────────────────────────────────
+eye:
+  sfreq: 62.5             # Hz – Gazepoint GP3 HD
+  validity_col: bpogv     # 1=valid gaze, 0=blink/missing
+  fpog_col:     fpogv     # fixation POG validity
+
+# ─── Mouse ───────────────────────────────────────────────
+mouse:
+  mode: event             # event-driven, not fixed-rate
+
+# ─── Scenario marker table ───────────────────────────────
+# 16 known UX friction scenario types triggered during experiment
+scenario_types:
+  - 3ds_soft_fail
+  - broken_image
+  - button_delay
+  - coupon_expired
+  - coupon_min_spend
+  - facet_reset_once
+  - feedback_late
+  - first_click_miss
+  - network_jitter
+  - overlay_blocking
+  - payment_retry_timeout
+  - price_change
+  - search_irrelevant
+  - skeleton_prolong
+  - slow_image
+  - sort_reset
+
+# ─── Subject exclusion criteria (1.5) ────────────────────
+# Set once; do NOT change after analysis begins.
+exclusion:
+  # 1.3: flag if triple (EEG+Eye+Mouse) coverage of EEG window < this
+  min_triple_overlap_pct:   90.0
+  # 1.5: exclude if EEG–Eye pairwise overlap < this (primary sync check)
+  min_eeg_eye_overlap_pct:  95.0
+  # 1.5: exclude if BPOGV validity < this
+  min_eye_validity_pct:     70.0
+  # 1.5: exclude if unique scenario types triggered < this
+  min_scenarios_triggered:   9
+
+# ─── Known subjects ──────────────────────────────────────
+subjects:
+  - id:         14
+    folder:     user_014_alen_maryo_variant_b
+    name:       Alen Maryo
+    group:      variant_b
+    eeg_prefix: AlenAlen422
+    session_id: 3c68fa71-9330-4be7-b592-1329c15b8368
+
+  - id:         15
+    folder:     user_015_eren_tamparlak_variant_c
+    name:       Eren Tamparlak
+    group:      variant_c
+    eeg_prefix: ET4272026
+    session_id: f4f73229-9292-4e56-83b7-669785f6adbf
+
+  - id:         16
+    folder:     user_016_berk_uygun_variant_b
+    name:       Berk Uygun
+    group:      variant_b
+    eeg_prefix: BU427
+    session_id: a420ae99-730b-4209-ac9f-01d49a0a9e58
+
+  - id:         17
+    folder:     "user_017_mehmet_i̇ncekara_variant_b"
+    name:       "Mehmet İncekara"
+    group:      variant_b
+    eeg_prefix: MI429
+    session_id: e050b756-7c8b-4306-91fe-863bccd1d062
+
+  - id:         18
+    folder:     "user_018_feyiz_burak_öztürk_variant_b"
+    name:       "Feyiz Burak Öztürk"
+    group:      variant_b
+    eeg_prefix: FB4292026
+    session_id: f285134b-0d42-4a73-9d85-d59fe6cb4947
+
+  - id:         19
+    folder:     user_019_kaan_burma_variant_a
+    name:       Kaan Burma
+    group:      variant_a
+    eeg_prefix: KB430
+    session_id: ddbca6a5-2c5f-41a5-bc44-c5c96470c213
+
+  - id:         20
+    folder:     "user_020_veli_barış_sevinçhan_variant_b"
+    name:       "Veli Barış Sevinçhan"
+    group:      variant_b
+    eeg_prefix: VB430
+    session_id: abd00258-f30a-4cd0-bee7-ce03223df26a
+
+  - id:         21
+    folder:     user_021_enis_tiren_variant_a
+    name:       Enis Tiren
+    group:      variant_a
+    eeg_prefix: ET542026
+    session_id: 1c2d1e8e-5f56-4b4c-bbb0-051c5ba78b12
+
+  - id:         22
+    folder:     "user_022_recep_danacı_variant_c"
+    name:       "Recep Danacı"
+    group:      variant_c
+    eeg_prefix: RD552026
+    session_id: 4a14994a-fb27-4a56-bd96-f48677a0051a
+
+  - id:         23
+    folder:     user_023_duru_erol_variant_c
+    name:       Duru Erol
+    group:      variant_c
+    eeg_prefix: DE552026
+    session_id: 3acff52a-b428-41b5-aad8-1574066c29b5
+
+# ─── Scenario metadata ──────────────────────────────────────
+scenario_metadata:
+  S01:
+    name: payment_retry_timeout
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: false
+  S11:
+    name: slow_image
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S12:
+    name: broken_image
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S13:
+    name: skeleton_prolong
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S14:
+    name: search_irrelevant
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S15:
+    name: button_delay
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S16:
+    name: first_click_miss
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S17:
+    name: feedback_late
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S18:
+    name: network_jitter
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S19:
+    name: overlay_blocking
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S20:
+    name: price_change
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S21:
+    name: coupon_min_spend
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S22:
+    name: coupon_expired
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S23:
+    name: facet_reset_once
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: true
+  S24:
+    name: sort_reset
+    expected_max_duration_s: 8.0
+    extends_past_window: true
+    is_frustration_label: true
+  S30:
+    name: add_to_cart
+    expected_max_duration_s: 10.0
+    extends_past_window: true
+    is_frustration_label: false
+  S31:
+    name: checkout_start
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: false
+  S33:
+    name: search_performed
+    expected_max_duration_s: 3.0
+    extends_past_window: false
+    is_frustration_label: false

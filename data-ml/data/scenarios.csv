@@ -1,0 +1,17 @@
+id,name,type,target_page,selector,params,probability,enabled,created_at
+1,Slow Image Load,slow_image,/products,.product-image,"{""delay"":1500}",0.6,1,2025-12-26 10:10:20
+2,Broken Image,broken_image,/products,.product-image,"{""probability"":0.05}",0.3,1,2025-12-26 10:10:20
+3,Skeleton Prolong,skeleton_prolong,/products,.product-card,"{""delay"":2000}",0.6,1,2025-12-26 10:10:20
+4,Button Delay,button_delay,*,.add-to-cart,"{""delay"":1200}",0.6,1,2025-12-26 10:10:20
+5,First Click Miss,first_click_miss,*,button,{},0.3,1,2025-12-26 10:10:20
+6,Feedback Late,feedback_late,*,,"{""delay"":1500}",0.6,1,2025-12-26 10:10:20
+7,Search Irrelevant,search_irrelevant,/products,,"{""duration"":5000}",0.6,1,2025-12-26 10:10:20
+8,Facet Reset Once,facet_reset_once,/products,,{},0.3,1,2025-12-26 10:10:21
+9,Sort Reset,sort_reset,/products,,{},0.3,1,2025-12-26 10:10:21
+10,Price Change Warning,price_change,/checkout,,"{""change_percent"":5}",0.6,1,2025-12-26 10:10:21
+11,Coupon Min Spend,coupon_min_spend,/cart,,"{""min_amount"":500}",0.6,1,2025-12-26 10:10:21
+12,Coupon Expired,coupon_expired,/cart,,{},0.3,1,2025-12-26 10:10:21
+13,3DS Soft Fail,3ds_soft_fail,/checkout,,{},0.6,1,2025-12-26 10:10:21
+14,Payment Retry Timeout,payment_retry_timeout,/checkout,,"{""timeout"":1500}",0.6,1,2025-12-26 10:10:21
+15,Overlay Blocking,overlay_blocking,/,,"{""duration"":4000}",0.3,1,2025-12-26 10:10:21
+16,Network Jitter,network_jitter,*,,"{""delay"":500}",0.6,1,2025-12-26 10:10:22

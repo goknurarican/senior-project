@@ -1,0 +1,40 @@
+# Raw and processed data (stored on Drive)
+data/raw/
+data/processed/
+data/interim/
+data/excluded/
+data/clean_for_team/
+data/reports/
+data/gaze_data_log.csv
+processed/
+features/
+logs/
+
+# Large binary files
+*.eeg
+*.vhdr
+*.vmrk
+*.fif
+*.npy
+*.npz
+*.mp4
+*.pth
+*.bin
+*.pt
+
+# Large CSVs in baseline stats
+approach_a/02_baseline_comparison/statistics/per_epoch_features.csv
+
+# Per-fold model weights
+approach_a/*/models/fold_*/
+approach_a/*/models/pretrained/
+
+# Misc
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+*.bak
+src/__pycache__/
+analysis_notes.txt
+analysis_notes.txt.bak
