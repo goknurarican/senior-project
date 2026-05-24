@@ -1,0 +1,15 @@
+{
+  "shuffle_strategy": "epoch-level random permutation",
+  "n_shuffles": 5,
+  "per_seed_auc": [
+    0.4594,
+    0.5179,
+    0.5524,
+    0.4931,
+    0.4493
+  ],
+  "mean_loso_auc": 0.4944,
+  "std_loso_auc": 0.0379,
+  "expected_chance": 0.5,
+  "interpretation": "NO STRUCTURAL LEAKAGE \u2014 model needs real signal (genuine classification)"
+}

@@ -1,0 +1,37 @@
+{
+  "n_features": 7,
+  "feature_names": [
+    "frontal_theta",
+    "frontal_alpha",
+    "parietal_alpha",
+    "central_beta",
+    "faa_dynamic",
+    "engagement_index",
+    "theta_beta_ratio"
+  ],
+  "model": "RandomForest (n_estimators=200)",
+  "loso_accuracy": 0.5036,
+  "loso_auc": 0.5386,
+  "loso_auc_std": 0.0891,
+  "per_fold_auc": [
+    0.6798,
+    0.49,
+    0.6535,
+    0.4543,
+    0.5662,
+    0.5581,
+    0.3728,
+    0.5481,
+    0.5244
+  ],
+  "feature_importance": {
+    "frontal_theta": 0.151,
+    "frontal_alpha": 0.1494,
+    "parietal_alpha": 0.1356,
+    "central_beta": 0.1431,
+    "faa_dynamic": 0.1371,
+    "engagement_index": 0.1476,
+    "theta_beta_ratio": 0.1363
+  },
+  "interpretation": "classical features weak \u2014 LaBraM adds significant value (or exploits a different signal)"
+}

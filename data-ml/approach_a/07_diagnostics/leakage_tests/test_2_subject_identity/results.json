@@ -1,0 +1,8 @@
+{
+  "task": "subject_id_classification_from_labram",
+  "n_classes": 9,
+  "chance_accuracy": 0.111,
+  "achieved_accuracy": 0.2188,
+  "achieved_f1_macro": 0.0399,
+  "interpretation": "LOW subject identity \u2014 embeddings are subject-agnostic"
+}

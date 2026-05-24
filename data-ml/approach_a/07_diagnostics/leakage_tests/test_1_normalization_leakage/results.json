@@ -1,0 +1,38 @@
+{
+  "version_A_leaky_normalization": {
+    "loso_accuracy": 1.0,
+    "loso_accuracy_std": 0.0,
+    "loso_auc": 1.0,
+    "loso_auc_std": 0.0,
+    "per_fold_auc": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "version_B_leakage_free": {
+    "loso_accuracy": 1.0,
+    "loso_accuracy_std": 0.0,
+    "loso_auc": 1.0,
+    "loso_auc_std": 0.0,
+    "per_fold_auc": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "delta_auc": 0.0,
+  "interpretation": "no normalization leakage: both versions similar | AUC remains high even without per-subject norm \u2192 signal is elsewhere"
+}
