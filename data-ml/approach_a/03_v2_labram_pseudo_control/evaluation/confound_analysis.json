@@ -1,0 +1,12 @@
+{
+  "temporal_position": {
+    "spearman_r": 0.15280140669694534,
+    "p_value": 4.859988357652553e-09,
+    "confound_flag": false
+  },
+  "window_position": {
+    "spearman_r": -0.1694054973199032,
+    "p_value": 8.211911344754539e-11,
+    "confound_flag": false
+  }
+}

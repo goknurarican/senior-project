@@ -1,0 +1,16 @@
+scenario,n,accuracy,balanced_accuracy,f1_macro,auc
+broken_image,17,1.0,1.0,1.0,0.0
+button_delay,40,1.0,1.0,1.0,0.0
+control_baseline,796,0.9962311557788944,0.9962311557788944,0.49905601006922595,0.0
+coupon_expired,7,1.0,1.0,1.0,0.0
+coupon_min_spend,34,1.0,1.0,1.0,0.0
+facet_reset_once,33,1.0,1.0,1.0,0.0
+feedback_late,167,1.0,1.0,1.0,0.0
+first_click_miss,77,1.0,1.0,1.0,0.0
+network_jitter,150,1.0,1.0,1.0,0.0
+overlay_blocking,1,1.0,1.0,1.0,0.0
+price_change,17,1.0,1.0,1.0,0.0
+search_irrelevant,1,1.0,1.0,1.0,0.0
+skeleton_prolong,39,1.0,1.0,1.0,0.0
+slow_image,44,1.0,1.0,1.0,0.0
+sort_reset,29,1.0,1.0,1.0,0.0

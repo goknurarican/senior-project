@@ -1,0 +1,239 @@
+{
+  "n_folds": 9,
+  "subjects": [
+    14,
+    15,
+    16,
+    17,
+    18,
+    20,
+    21,
+    22,
+    23
+  ],
+  "accuracy": {
+    "mean": 0.9979120820437417,
+    "std": 0.0029530100545028895
+  },
+  "balanced_accuracy": {
+    "mean": 0.9981461941221065,
+    "std": 0.0026237190122128493
+  },
+  "f1_macro": {
+    "mean": 0.9978795708711519,
+    "std": 0.0029988440879241706
+  },
+  "auc": {
+    "mean": 0.9991649132105754,
+    "std": 0.0023049688181563757
+  },
+  "per_fold": [
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          72,
+          0
+        ],
+        [
+          0,
+          66
+        ]
+      ],
+      "n_test": 138,
+      "n_variant": 66,
+      "n_control": 72,
+      "fold_time_sec": 29.8,
+      "test_subject": 14,
+      "stopped_epoch": 19
+    },
+    {
+      "accuracy": 0.9938271604938271,
+      "balanced_accuracy": 0.9946808510638299,
+      "f1_variant": 0.9927007299270073,
+      "f1_macro": 0.9936765681720598,
+      "auc": 0.9926470588235294,
+      "confusion_matrix": [
+        [
+          93,
+          1
+        ],
+        [
+          0,
+          68
+        ]
+      ],
+      "n_test": 162,
+      "n_variant": 68,
+      "n_control": 94,
+      "fold_time_sec": 37.2,
+      "test_subject": 15,
+      "stopped_epoch": 50
+    },
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          85,
+          0
+        ],
+        [
+          0,
+          78
+        ]
+      ],
+      "n_test": 163,
+      "n_variant": 78,
+      "n_control": 85,
+      "fold_time_sec": 37.9,
+      "test_subject": 16,
+      "stopped_epoch": 50
+    },
+    {
+      "accuracy": 0.9937106918238994,
+      "balanced_accuracy": 0.9942528735632183,
+      "f1_variant": 0.993103448275862,
+      "f1_macro": 0.9936615507275264,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          86,
+          1
+        ],
+        [
+          0,
+          72
+        ]
+      ],
+      "n_test": 159,
+      "n_variant": 72,
+      "n_control": 87,
+      "fold_time_sec": 35.6,
+      "test_subject": 17,
+      "stopped_epoch": 50
+    },
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          96,
+          0
+        ],
+        [
+          0,
+          75
+        ]
+      ],
+      "n_test": 171,
+      "n_variant": 75,
+      "n_control": 96,
+      "fold_time_sec": 37.7,
+      "test_subject": 18,
+      "stopped_epoch": 50
+    },
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          102,
+          0
+        ],
+        [
+          0,
+          72
+        ]
+      ],
+      "n_test": 174,
+      "n_variant": 72,
+      "n_control": 102,
+      "fold_time_sec": 35.5,
+      "test_subject": 20,
+      "stopped_epoch": 50
+    },
+    {
+      "accuracy": 0.9936708860759493,
+      "balanced_accuracy": 0.9943820224719101,
+      "f1_variant": 0.9928057553956835,
+      "f1_macro": 0.9935780189407797,
+      "auc": 0.9998371600716496,
+      "confusion_matrix": [
+        [
+          88,
+          1
+        ],
+        [
+          0,
+          69
+        ]
+      ],
+      "n_test": 158,
+      "n_variant": 69,
+      "n_control": 89,
+      "fold_time_sec": 5.9,
+      "test_subject": 21,
+      "stopped_epoch": 8
+    },
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          79,
+          0
+        ],
+        [
+          0,
+          75
+        ]
+      ],
+      "n_test": 154,
+      "n_variant": 75,
+      "n_control": 79,
+      "fold_time_sec": 7.1,
+      "test_subject": 22,
+      "stopped_epoch": 6
+    },
+    {
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "f1_variant": 1.0,
+      "f1_macro": 1.0,
+      "auc": 1.0,
+      "confusion_matrix": [
+        [
+          92,
+          0
+        ],
+        [
+          0,
+          81
+        ]
+      ],
+      "n_test": 173,
+      "n_variant": 81,
+      "n_control": 92,
+      "fold_time_sec": 5.4,
+      "test_subject": 23,
+      "stopped_epoch": 6
+    }
+  ]
+}

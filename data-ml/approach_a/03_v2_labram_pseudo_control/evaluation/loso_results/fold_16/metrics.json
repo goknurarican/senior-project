@@ -1,0 +1,23 @@
+{
+  "accuracy": 1.0,
+  "balanced_accuracy": 1.0,
+  "f1_variant": 1.0,
+  "f1_macro": 1.0,
+  "auc": 1.0,
+  "confusion_matrix": [
+    [
+      85,
+      0
+    ],
+    [
+      0,
+      78
+    ]
+  ],
+  "n_test": 163,
+  "n_variant": 78,
+  "n_control": 85,
+  "fold_time_sec": 37.9,
+  "test_subject": 16,
+  "stopped_epoch": 50
+}

@@ -1,0 +1,24 @@
+Device: mps
+=== Step 1-3: Load results, aggregate, per-subject ===
+  Loaded 1452 predictions
+=== Step 5: Ablation Study ===
+  full        : AUC=0.999±0.002
+  no_eeg      : AUC=0.507±0.061
+  no_eye      : AUC=0.999±0.002
+  no_mouse    : AUC=1.000±0.000
+  eeg_only    : AUC=1.000±0.000
+  eye_only    : AUC=0.579±0.070
+  mouse_only  : AUC=0.489±0.076
+  Ablation saved.
+=== Step 6: Attention Analysis ===
+  Attention saved.
+=== Step 8: Baseline Models (RF, SVM, MLP) ===
+  RF: AUC=0.947±0.042
+  SVM: AUC=0.912±0.052
+  MLP: AUC=0.915±0.050
+  Baselines saved.
+=== Step 9: Confound Analysis ===
+  {'temporal_position': {'spearman_r': 0.15280140669694534, 'p_value': 4.859988357652553e-09, 'confound_flag': False}, 'window_position': {'spearman_r': -0.1694054973199032, 'p_value': 8.211911344754539e-11, 'confound_flag': False}}
+=== Step 10: Final Report ===
+  Report saved.
+All evaluation steps complete.
