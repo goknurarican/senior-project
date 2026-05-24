@@ -1,0 +1,15 @@
+scenario,cluster
+broken_image,1
+button_delay,1
+coupon_expired,2
+coupon_min_spend,2
+facet_reset_once,2
+feedback_late,1
+first_click_miss,1
+network_jitter,1
+overlay_blocking,3
+price_change,4
+search_irrelevant,3
+skeleton_prolong,1
+slow_image,4
+sort_reset,4
