@@ -1,0 +1,12 @@
+{
+  "accuracy": 1.0,
+  "balanced_accuracy": 1.0,
+  "f1_macro": 1.0,
+  "auc": 1.0,
+  "n_test": 52,
+  "n_variant": 26,
+  "n_control": 26,
+  "fold_time_sec": 1.7,
+  "test_subject": 22,
+  "stopped_epoch": 6
+}
