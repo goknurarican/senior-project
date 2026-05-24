@@ -1,0 +1,16 @@
+class_id,scenario,n_test,precision,recall,f1,top3_confused
+0,control_action_matched,240,0.759,0.683,0.719,feedback_late; network_jitter; first_click_miss
+1,broken_image,10,0.0,0.0,0.0,control_action_matched; feedback_late; skeleton_prolong
+2,button_delay,16,0.0,0.0,0.0,control_action_matched; feedback_late; network_jitter
+3,coupon_expired,4,0.0,0.0,0.0,sort_reset; feedback_late; coupon_min_spend
+4,coupon_min_spend,13,0.056,0.077,0.065,feedback_late; control_action_matched; skeleton_prolong
+5,facet_reset_once,10,0.0,0.0,0.0,network_jitter; feedback_late; first_click_miss
+6,feedback_late,61,0.107,0.131,0.118,control_action_matched; network_jitter; first_click_miss
+7,first_click_miss,29,0.031,0.034,0.033,network_jitter; feedback_late; control_action_matched
+8,network_jitter,50,0.2,0.26,0.226,feedback_late; control_action_matched; first_click_miss
+9,overlay_blocking,1,0.0,0.0,0.0,control_action_matched
+10,price_change,7,0.0,0.0,0.0,network_jitter; feedback_late; slow_image
+11,search_irrelevant,1,0.0,0.0,0.0,facet_reset_once
+12,skeleton_prolong,12,0.182,0.167,0.174,feedback_late; network_jitter; first_click_miss
+13,slow_image,16,0.095,0.125,0.108,network_jitter; feedback_late; control_action_matched
+14,sort_reset,10,0.0,0.0,0.0,first_click_miss; feedback_late; control_action_matched
