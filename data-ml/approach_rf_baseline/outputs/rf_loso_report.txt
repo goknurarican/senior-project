@@ -1,0 +1,19 @@
+RANDOM FOREST LOSO BASELINE REPORT
+================================================================================
+
+Rows: 656
+Positive labels: 30
+Positive rate: 4.57%
+
+Global results:
+ roc_auc   pr_auc  balanced_accuracy  f1_positive  precision_positive  recall_positive  tn  fp  fn  tp   n  positives  positive_rate       ablation  n_features
+0.555964 0.061674                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732       eeg_only          27
+0.429127 0.045196                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732       eye_only           6
+0.451065 0.042408                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732     mouse_only          10
+0.566400 0.062272                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732        eeg_eye          33
+0.536368 0.059539                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732      eeg_mouse          37
+0.371938 0.034501                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732      eye_mouse          16
+0.569063 0.064543                0.5          0.0                 0.0              0.0 626   0  30   0 656         30       0.045732 all_modalities          43
+
+Important note:
+The target label_rage_click is highly imbalanced and represents a behavioral proxy, not a direct self-report frustration label. Accuracy should not be used as the main metric.
