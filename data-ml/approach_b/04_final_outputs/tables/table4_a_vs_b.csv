@@ -1,0 +1,8 @@
+aspect,approach_a_v6,approach_b_gnn
+task,15-class scenario id,15-class scenario id
+neural level,region oscillation dynamics,inter-region connectivity
+modalities,EEG + eye + mouse,EEG only (network)
+features,Morlet ERSP + behaviour,ROI wPLI + ROI band power
+model,multimodal transformer (~260k params),2 layer GCN (under 1k params)
+accuracy,0.395 (chance 0.067),0.038 (chance 0.067)
+interpretation,per-scenario ERSP signatures,per-scenario network signatures

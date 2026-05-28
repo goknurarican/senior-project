@@ -1,0 +1,2 @@
+metric,scenario,band,roi_a,roi_b,delta_mean,cohens_d,t_p_raw,t_p_fdr,wilcoxon_p_raw,wilcoxon_p_fdr,perm_p_raw,direction,significant,n_subjects
+wpli,skeleton_prolong,gamma,parietal,temporal,0.030757976695895195,1.7184577742622857,0.0008685753729627548,0.01824008283221785,0.00390625,0.08203125,0.009950248756218905,increase,True,9

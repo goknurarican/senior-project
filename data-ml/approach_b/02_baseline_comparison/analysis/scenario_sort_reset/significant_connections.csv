@@ -1,0 +1,2 @@
+metric,scenario,band,roi_a,roi_b,delta_mean,cohens_d,t_p_raw,t_p_fdr,wilcoxon_p_raw,wilcoxon_p_fdr,perm_p_raw,direction,significant,n_subjects
+aec,sort_reset,beta,frontal,temporal,-0.04182843118906021,-1.7800469380538508,0.0015053490450101206,0.031612329945212535,0.0078125,0.1640625,0.01990049751243781,decrease,True,8

@@ -1,0 +1,16 @@
+label,scenario,n_epochs,accuracy,f1
+0,control_action_matched,240,0.020833333333333332,0.04065040650406504
+1,broken_image,10,0.0,0.0
+2,button_delay,16,0.1875,0.09090909090909091
+3,coupon_expired,4,0.0,0.0
+4,coupon_min_spend,13,0.0,0.0
+5,facet_reset_once,10,0.0,0.0
+6,feedback_late,61,0.08196721311475409,0.12658227848101267
+7,first_click_miss,29,0.034482758620689655,0.058823529411764705
+8,network_jitter,50,0.02,0.02247191011235955
+9,overlay_blocking,1,0.0,0.0
+10,price_change,7,0.0,0.0
+11,search_irrelevant,1,0.0,0.0
+12,skeleton_prolong,12,0.08333333333333333,0.043478260869565216
+13,slow_image,16,0.0,0.0
+14,sort_reset,10,0.0,0.0

@@ -1,0 +1,15 @@
+scenario,band,connection,cohens_d,fdr_p,direction,n_subjects
+broken_image,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+button_delay,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+coupon_expired,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+coupon_min_spend,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+facet_reset_once,beta,frontal_central-parietal,-2.20,0.024,decrease,7
+feedback_late,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+first_click_miss,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+network_jitter,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+overlay_blocking,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+price_change,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+search_irrelevant,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+skeleton_prolong,gamma,parietal-temporal,+1.72,0.018,increase,9
+slow_image,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.
+sort_reset,n.s.,n.s.,n.s.,n.s.,n.s.,n.s.

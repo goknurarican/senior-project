@@ -1,0 +1,15 @@
+scenario,fronto_parietal_control,default_mode_alpha,sensorimotor,category
+broken_image,False,False,False,none
+button_delay,False,False,False,none
+coupon_expired,False,False,False,none
+coupon_min_spend,False,False,False,none
+facet_reset_once,True,False,False,fronto_parietal_control
+feedback_late,False,False,False,none
+first_click_miss,False,False,False,none
+network_jitter,False,False,False,none
+overlay_blocking,False,False,False,none
+price_change,False,False,False,none
+search_irrelevant,False,False,False,none
+skeleton_prolong,False,False,False,none
+slow_image,False,False,False,none
+sort_reset,False,False,False,none
