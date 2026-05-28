@@ -1,0 +1,26 @@
+APPROACH B STAGE 5: BEHAVIORAL SCENARIO ANALYSIS
+================================================================================
+
+Input feature table: C:\Users\eliss\Documents\senior-project\data-ml\approach_rf_baseline\outputs\feature_table_clean.csv
+Rows: 656
+Subjects: [14, 15, 16, 17, 18, 20, 21, 22, 23]
+Scenarios: 14
+Features tested: 14
+
+Important interpretation note:
+This analysis compares each scenario against the same subject's other scenario epochs. It is not a clean control-vs-scenario comparison, because the available RF feature table contains scenario epochs rather than action-matched behavioral control epochs.
+
+Top behavioral feature per scenario:
+        scenario            feature modality  n_subjects  n_epochs_scenario  delta_mean_vs_other_scenarios  cohens_d  t_p_raw  t_p_fdr direction  significant
+    broken_image mouse_acc_abs_mean    mouse           9                 19                    -947.744270 -0.553539 0.135370 0.524586  decrease        False
+    button_delay            eye_std      eye           7                 40                      -0.020792 -1.162959 0.021749 0.374511  decrease        False
+  coupon_expired mouse_acc_abs_mean    mouse           4                  7                   -2573.720839 -1.943295 0.030190 0.374511  decrease        False
+coupon_min_spend           eye_mean      eye           9                 34                       0.080814  1.323512 0.004116 0.230487  increase        False
+facet_reset_once           eye_mean      eye           9                 33                       0.088899  1.893845 0.000464 0.077980  increase        False
+   feedback_late        eye_entropy      eye           9                164                      -0.072304 -0.810580 0.041090 0.374511  decrease        False
+first_click_miss  mouse_click_count    mouse           9                 77                       0.407252  0.721227 0.062430 0.414010  increase        False
+  network_jitter           eye_mean      eye           9                145                      -0.031345 -0.813998 0.040438 0.374511  decrease        False
+    price_change           eye_mean      eye           7                 16                      -0.101506 -1.076466 0.029256 0.374511  decrease        False
+skeleton_prolong        eye_entropy      eye           9                 39                       0.227094  1.002222 0.016899 0.354882  increase        False
+      slow_image          eye_range      eye           9                 43                      -0.090547 -1.165717 0.008113 0.292256  decrease        False
+      sort_reset   mouse_click_rate    mouse           8                 30                      -0.002688 -1.217376 0.010789 0.292256  decrease        False
