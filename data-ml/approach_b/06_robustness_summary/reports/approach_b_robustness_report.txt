@@ -1,0 +1,118 @@
+APPROACH B ROBUSTNESS SUMMARY
+================================================================================
+
+1. Input
+--------------------------------------------------------------------------------
+Input file: C:\Users\eliss\Documents\senior-project\data-ml\approach_b\02_baseline_comparison\analysis\all_connections_full.csv
+Total connection-level tests: 2352
+Metrics: ['aec', 'wpli']
+Bands: ['alpha', 'beta', 'gamma', 'theta']
+Scenarios: ['broken_image', 'button_delay', 'coupon_expired', 'coupon_min_spend', 'facet_reset_once', 'feedback_late', 'first_click_miss', 'network_jitter', 'overlay_blocking', 'price_change', 'search_irrelevant', 'skeleton_prolong', 'slow_image', 'sort_reset']
+
+2. Confirmatory FDR-significant connectivity effects
+--------------------------------------------------------------------------------
+Number of FDR-significant effects: 8
+
+        scenario metric  band               connection        network_category direction  cohens_d  t_p_fdr  wilcoxon_p_raw  wilcoxon_p_fdr  perm_p_raw  n_subjects reliability_flag
+facet_reset_once    aec gamma      occipital-occipital        visual_occipital  decrease -2.369531 0.016069        0.015625        0.109375    0.014925           7         usable_n
+skeleton_prolong   wpli gamma        parietal-temporal       parietal_temporal  increase  1.718458 0.018240        0.003906        0.082031    0.009950           9         usable_n
+facet_reset_once   wpli  beta frontal_central-parietal fronto-parietal_control  decrease -2.198650 0.023813        0.015625        0.328125    0.029851           7         usable_n
+  network_jitter    aec theta        frontal-occipital        visual_occipital  increase  1.372364 0.031523        0.007812        0.061523    0.009950           9         usable_n
+  network_jitter    aec theta frontal_central-parietal fronto-parietal_control  increase  1.310364 0.031523        0.007812        0.061523    0.009950           9         usable_n
+  network_jitter    aec theta       parietal-occipital        visual_occipital  increase  1.302164 0.031523        0.011719        0.061523    0.009950           9         usable_n
+      sort_reset    aec  beta         frontal-temporal                   other  decrease -1.780047 0.031612        0.007812        0.164062    0.019900           8         usable_n
+facet_reset_once    aec gamma          frontal-central                   other  decrease -1.724644 0.040308        0.015625        0.109375    0.014925           7         usable_n
+
+3. Exploratory trends
+--------------------------------------------------------------------------------
+Definition: not FDR-significant, but raw p < 0.05, |Cohen's d| >= 0.8, and n_subjects >= 5.
+Number of exploratory trends: 86
+
+        scenario metric  band                connection        network_category direction  cohens_d  t_p_raw  t_p_fdr  wilcoxon_p_raw  wilcoxon_p_fdr  perm_p_raw  permutation_support  n_subjects reliability_flag
+    button_delay    aec gamma       occipital-occipital        visual_occipital  decrease -1.854587 0.002692 0.056541        0.015625        0.328125    0.009950                 True           7         usable_n
+    button_delay    aec  beta       occipital-occipital        visual_occipital  decrease -1.771022 0.003376 0.070895        0.015625        0.164062    0.004975                 True           7         usable_n
+first_click_miss    aec  beta  frontal_central-parietal fronto-parietal_control  increase  1.419186 0.005098 0.107056        0.007812        0.164062    0.004975                 True           8         usable_n
+skeleton_prolong   wpli  beta         parietal-temporal       parietal_temporal  increase  1.412858 0.002843 0.059703        0.003906        0.082031    0.004975                 True           9         usable_n
+    button_delay   wpli theta  frontal_central-temporal                   other  increase  1.389142 0.010388 0.218153        0.015625        0.328125    0.014925                 True           7         usable_n
+    broken_image    aec theta          frontal-parietal fronto-parietal_control  decrease -1.339127 0.003855 0.080959        0.007812        0.164062    0.014925                 True           9         usable_n
+   feedback_late   wpli theta frontal_central-occipital        visual_occipital  increase  1.298007 0.004583 0.096246        0.011719        0.117188    0.019900                 True           9         usable_n
+coupon_min_spend    aec  beta   frontal_central-central            sensorimotor  increase  1.291339 0.004714 0.099004        0.003906        0.082031    0.009950                 True           9         usable_n
+   feedback_late   wpli alpha         parietal-parietal                   other  decrease -1.280323 0.004940 0.103748        0.007812        0.164062    0.004975                 True           9         usable_n
+    button_delay    aec  beta        occipital-temporal        visual_occipital  decrease -1.272014 0.015128 0.158840        0.015625        0.164062    0.019900                 True           7         usable_n
+coupon_min_spend   wpli theta           central-central                   other  decrease -1.263699 0.005304 0.111374        0.011719        0.205078    0.019900                 True           9         usable_n
+      slow_image   wpli alpha          frontal-temporal                   other  increase  1.252200 0.005571 0.116999        0.003906        0.082031    0.004975                 True           9         usable_n
+      slow_image   wpli gamma  frontal_central-parietal                   other  decrease -1.200768 0.006959 0.146138        0.011719        0.246094    0.014925                 True           9         usable_n
+first_click_miss    aec gamma          frontal-parietal                   other  increase  1.184973 0.012224 0.148577        0.015625        0.246094    0.024876                 True           8         usable_n
+    broken_image    aec gamma  frontal_central-temporal                   other  increase  1.182765 0.007528 0.158091        0.019531        0.410156    0.009950                 True           9         usable_n
+first_click_miss    aec  beta        occipital-temporal        visual_occipital  increase  1.160401 0.013448 0.141203        0.023438        0.246094    0.029851                 True           8         usable_n
+first_click_miss    aec gamma         parietal-temporal       parietal_temporal  decrease -1.147365 0.014150 0.148577        0.023438        0.246094    0.009950                 True           8         usable_n
+facet_reset_once   wpli gamma  frontal_central-parietal                   other  decrease -1.144020 0.023193 0.323917        0.031250        0.328125    0.034826                 True           7         usable_n
+facet_reset_once    aec  beta           frontal-central                   other  decrease -1.142314 0.023329 0.244950        0.031250        0.328125    0.034826                 True           7         usable_n
+coupon_min_spend    aec alpha           frontal-central                   other  increase  1.134588 0.009309 0.109328        0.019531        0.136719    0.024876                 True           9         usable_n
+coupon_min_spend    aec alpha   frontal-frontal_central                   other  increase  1.109401 0.010412 0.109328        0.011719        0.123047    0.004975                 True           9         usable_n
+first_click_miss    aec theta         central-occipital        visual_occipital  increase  1.097044 0.017252 0.162922        0.039062        0.127604    0.049751                 True           8         usable_n
+facet_reset_once   wpli gamma          frontal-temporal                   other  decrease -1.061054 0.030866 0.323917        0.015625        0.328125    0.009950                 True           7         usable_n
+    button_delay    aec  beta         temporal-temporal                   other  decrease -1.056660 0.031343 0.219399        0.031250        0.164062    0.019900                 True           7         usable_n
+first_click_miss    aec theta          frontal-temporal                   other  increase  1.047476 0.021024 0.162922        0.039062        0.127604    0.049751                 True           8         usable_n
+  network_jitter    aec theta          central-temporal                   other  increase  1.046411 0.013821 0.066611        0.011719        0.061523    0.019900                 True           9         usable_n
+      slow_image   wpli theta          frontal-temporal                   other  increase  1.037750 0.014375 0.301868        0.003906        0.082031    0.009950                 True           9         usable_n
+coupon_min_spend   wpli theta  frontal_central-parietal fronto-parietal_control  increase  1.028046 0.015022 0.157735        0.019531        0.205078    0.019900                 True           9         usable_n
+skeleton_prolong   wpli alpha          frontal-temporal                   other  decrease -1.019045 0.015651 0.328661        0.027344        0.287109    0.024876                 True           9         usable_n
+  network_jitter    aec theta          frontal-parietal fronto-parietal_control  increase  1.016130 0.015860 0.066611        0.019531        0.082031    0.034826                 True           9         usable_n
+skeleton_prolong    aec theta  frontal_central-parietal fronto-parietal_control  decrease -1.007535 0.016494 0.266226        0.011719        0.246094    0.024876                 True           9         usable_n
+coupon_min_spend   wpli alpha           frontal-frontal                   other  increase  0.982123 0.018528 0.203968        0.007812        0.164062    0.019900                 True           9         usable_n
+first_click_miss    aec theta           frontal-central                   other  increase  0.979051 0.027727 0.162922        0.039062        0.127604    0.024876                 True           8         usable_n
+   feedback_late    aec alpha  frontal_central-temporal                   other  increase  0.968175 0.019754 0.414838        0.027344        0.574219    0.029851                 True           9         usable_n
+    button_delay   wpli alpha  frontal_central-parietal                   other  increase  0.968014 0.042844 0.609515        0.031250        0.546875    0.029851                 True           7         usable_n
+coupon_min_spend   wpli alpha  frontal_central-temporal                   other  increase  0.965871 0.019965 0.203968        0.039062        0.273438    0.024876                 True           9         usable_n
+first_click_miss   wpli alpha  frontal_central-parietal                   other  increase  0.953613 0.030762 0.525090        0.054688        0.546875    0.044776                 True           8         usable_n
+first_click_miss   wpli theta         parietal-parietal                   other  decrease -0.952135 0.030949 0.530214        0.039062        0.765625    0.049751                 True           8         usable_n
+facet_reset_once    aec theta          frontal-parietal fronto-parietal_control  increase  0.939179 0.047493 0.313863        0.015625        0.328125    0.019900                 True           7         usable_n
+skeleton_prolong    aec  beta          central-parietal            sensorimotor  decrease -0.931835 0.023359 0.490542        0.019531        0.410156    0.024876                 True           9         usable_n
+
+4. Metric-band summary
+--------------------------------------------------------------------------------
+metric  band  n_tests  n_significant  n_raw_p_lt_05  median_abs_d  max_abs_d  min_fdr_p  median_n_subjects
+   aec theta      294              3             22      0.294575   2.683809   0.031523                8.0
+   aec gamma      294              2             15      0.209286   2.369531   0.016069                8.0
+   aec  beta      294              1             17      0.216366   1.780047   0.031612                8.0
+  wpli gamma      294              1              9      0.220115   1.909710   0.018240                8.0
+  wpli  beta      294              1              8      0.209083   2.451797   0.023813                8.0
+  wpli theta      294              0             20      0.231662   2.076241   0.096246                8.0
+  wpli alpha      294              0             16      0.247735   3.497794   0.103748                8.0
+   aec alpha      294              0             11      0.179586   2.001650   0.109328                8.0
+
+5. Scenario reliability flags
+--------------------------------------------------------------------------------
+         scenario  max_n_subjects  min_n_subjects  n_tests  n_significant  n_raw_p_lt_05  max_abs_d  min_fdr_p reliability_flag
+ facet_reset_once               7               7      168              3             12   2.369531   0.016069         usable_n
+   network_jitter               9               9      168              3             10   1.372364   0.031523         usable_n
+       sort_reset               8               8      168              1              5   1.780047   0.031612         usable_n
+ skeleton_prolong               9               9      168              1             14   1.718458   0.018240         usable_n
+   coupon_expired               4               4      168              0             11   3.497794   0.125938       very_low_n
+     price_change               5               5      168              0              1   1.909710   0.271901        limited_n
+     button_delay               7               7      168              0              7   1.854587   0.056541         usable_n
+ first_click_miss               8               8      168              0             14   1.419186   0.107056         usable_n
+     broken_image               9               9      168              0              5   1.339127   0.080959         usable_n
+    feedback_late               9               9      168              0             14   1.298007   0.096246         usable_n
+ coupon_min_spend               9               9      168              0             19   1.291339   0.099004         usable_n
+       slow_image               9               9      168              0              6   1.252200   0.116999         usable_n
+ overlay_blocking               1               1      168              0              0   0.000000   1.000000       very_low_n
+search_irrelevant               1               1      168              0              0   0.000000   1.000000       very_low_n
+
+6. GNN validation summary
+--------------------------------------------------------------------------------
+Mean LOSO accuracy: 0.03756966249092161
+Chance level: 0.06666666666666667
+Mean macro F1: 0.01773596071508785
+Permutation p-value: 0.9215686274509803
+Interpretation: the 15-class GNN did not generalize under LOSO and should be treated as an auxiliary negative validation rather than the main result of Approach B.
+
+7. Behavioral extension summary
+--------------------------------------------------------------------------------
+The eye/mouse behavioral scenario comparison is exploratory and compares each scenario against the same subject's other scenario epochs. It is not a clean control-vs-scenario comparison.
+Behavioral top-feature rows marked significant: 0
+
+8. Recommended interpretation
+--------------------------------------------------------------------------------
+Approach B is strongest as a scenario-wise EEG functional connectivity analysis rather than as a classifier. A small number of scenario-specific connectivity effects survive FDR correction and show large effect sizes, but these findings should be interpreted cautiously due to N=9 and sparse scenario counts. The GNN classifier does not exceed chance-level performance, so it should not be presented as the main contribution. Eye/mouse behavioral features provide an exploratory multimodal extension, but no strong confirmatory behavioral effect should be claimed unless it survives correction.

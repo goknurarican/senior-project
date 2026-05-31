@@ -48,3 +48,8 @@ data-ml/approach_rf_baseline/outputs/
 *.pkl
 *.joblib
 *.db
+# Large local data/model artefacts
+*.npy
+*.pth
+approach_b/03_gnn_classification/models_binary/
+approach_b/03_gnn_classification/evaluation_binary/binary_loso_predictions.csv
